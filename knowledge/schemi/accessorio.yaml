@@ -1,0 +1,17 @@
+# Modello di scheda accessorio. Copiare in knowledge/accessori/<slug>.yaml.
+nome: null
+slug: null
+funzione: null
+categoria: null           # es. sicurezza, rotativo, aspirazione, air_assist, ricambio
+macchine_compatibili: []  # SOLO compatibilità verificate su fonte ufficiale
+incompatibilita: []
+necessita: null           # obbligatorio | consigliato | opzionale (per macchina, se varia)
+utilizzo: null
+vantaggi: []
+limiti: []
+commerciale:              # DINAMICO
+  prezzo: null
+  disponibilita: null
+url_scheda: null
+fonti: []
+data_verifica: null

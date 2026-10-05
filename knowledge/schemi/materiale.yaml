@@ -1,0 +1,15 @@
+# Modello di scheda materiale. Copiare in knowledge/materiali/<slug>.yaml.
+nome: null
+slug: null
+macchine_consigliate: []
+lavorazioni:
+  incisione: null
+  taglio: null
+  marcatura: null
+spessori: null
+parametri_ufficiali: []   # [{macchina, lavorazione, parametri, fonte}] — solo da fonti xTool
+esperienze_community: []  # [{descrizione, fonte}] — MAI presentate come ufficiali
+precauzioni: []
+da_evitare: null          # materiali/varianti da non lavorare e perché
+fonti: []
+data_verifica: null

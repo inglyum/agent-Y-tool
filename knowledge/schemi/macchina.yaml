@@ -1,0 +1,40 @@
+# Modello di scheda macchina. Copiare in knowledge/macchine/<slug>.yaml.
+# Lasciare null tutto ciò che non è verificato su una fonte ufficiale.
+nome: null
+slug: null
+famiglia: null
+tecnologia: null          # es. diodo, CO2, fibra, IR, UV, stampa, MetalFab (da verificare)
+potenza: null
+area_lavoro: null
+velocita: null
+materiali: []
+spessori: null
+capacita:
+  incisione: null
+  taglio: null
+  marcatura: null
+sicurezza: []
+camera: null
+autofocus: null
+accessori:
+  obbligatori: []         # slug di knowledge/accessori/
+  consigliati: []
+  opzionali: []
+software: []
+compatibilita: null
+vantaggi: []
+limiti: []
+utilizzo:
+  ideale: null
+  professionale: null
+  hobbistico: null
+confronto_modelli_simili: []   # [{slug: ..., differenze: ...}]
+commerciale:              # DINAMICO: riverificare sempre
+  prezzo: null
+  prezzo_barrato: null
+  promozione: null
+  disponibilita: null
+  garanzia: null
+url_scheda: null
+fonti: []                 # id da knowledge/fonti.yaml o URL esatti
+data_verifica: null       # AAAA-MM-GG

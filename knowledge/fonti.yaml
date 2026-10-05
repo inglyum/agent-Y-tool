@@ -1,0 +1,71 @@
+# Registro delle fonti. "priorita": 1 = più autorevole (vedi AGENT.md §2).
+fonti:
+  - id: xtool_eu_it
+    nome: xTool Europe — Italia
+    url: https://www.xtool.eu/it-it/
+    tipo: ufficiale
+    priorita: 1
+    ambito: [prodotti, macchine, prezzi, promozioni, bundle, accessori, materiali, ricambi, servizi, disponibilita, condizioni_commerciali, garanzia, offerte, novita]
+  - id: xtool_eu_catalogo
+    nome: Catalogo completo xTool
+    url: https://www.xtool.eu/it-it/collections/tutto-il-prodotto
+    tipo: ufficiale
+    priorita: 1
+    ambito: [macchine, accessori, materiali, ricambi, software, servizi]
+  - id: xtool_eu_macchine
+    nome: Pagina macchine
+    url: https://www.xtool.eu/it-it/collections/machine
+    tipo: ufficiale
+    priorita: 1
+    ambito: [modelli, tecnologie, potenze, applicazioni, caratteristiche, confronti, disponibilita]
+  - id: xtool_eu_accessori
+    nome: Accessori
+    url: https://www.xtool.eu/it-it/collections/accessory
+    tipo: ufficiale
+    priorita: 1
+    ambito: [accessori, compatibilita, prezzi, disponibilita, ricambi, sicurezza, rotativi, aspirazione, air_assist]
+  - id: xtool_support
+    nome: xTool Support Center
+    url: https://support.xtool.com/
+    tipo: ufficiale
+    priorita: 2
+    ambito: [manuali, installazione, configurazione, troubleshooting, manutenzione, faq, firmware, software, sicurezza, parametri, procedure]
+    sezioni: [Laser Engravers, MetalFab, Printing Solution, Accessories, Materials]
+  - id: xtool_manuali
+    nome: Documentazione e manuali ufficiali xTool
+    url: null   # raggiungibili dal Support Center
+    tipo: ufficiale
+    priorita: 3
+  - id: xtool_academy
+    nome: xTool Academy
+    url: null   # da registrare dopo verifica dell'URL ufficiale
+    tipo: ufficiale
+    priorita: 4
+    ambito: [formazione, tutorial, procedure, utilizzo_macchine, software, workflow]
+  - id: xtool_squad
+    nome: xTool Squad
+    url: null   # da registrare dopo verifica dell'URL ufficiale
+    tipo: ufficiale
+    priorita: 5
+    ambito: [host, demo, supporto_locale, training, material_test, commissioning]
+  - id: fb_xtool_official_it
+    nome: Gruppo Facebook xTool Official Italia
+    url: https://www.facebook.com/groups/xtoolofficialit
+    tipo: community   # MAI informazione ufficiale
+    priorita: 6
+    ambito: [domande_frequenti, problemi_ricorrenti, applicazioni_reali, materiali_usati, esperienze, linguaggio_community, bisogni_emergenti]
+  - id: host_squad
+    nome: Esperienze degli Host
+    tipo: esperienza
+    priorita: 7
+  - id: community_maker
+    nome: Community maker
+    tipo: community
+    priorita: 8
+  - id: indipendenti
+    nome: Fonti indipendenti
+    tipo: indipendente
+    priorita: 9
+
+# Campi che scadono: vanno riverificati prima di ogni risposta.
+campi_dinamici: [prezzo, sconto, disponibilita, promozione, nuovo_prodotto, accessori, compatibilita, software, firmware]
