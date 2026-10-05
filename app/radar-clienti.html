@@ -1,0 +1,332 @@
+<title>Radar Clienti xTool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: banco di lavoro a due colonne — a sinistra l'ingresso screenshot, a destra la lista clienti; su telefono una colonna. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#18212b; --muted:#5b6774; --line:#d5dbe2;
+  --accent:#d9480f; --accent-ink:#ffffff; --accent-soft:#fde8dd;
+  --hot:#c92a2a; --hot-bg:#ffe3e3; --warm:#a85d00; --warm-bg:#fff1d6; --cold:#1c6aa8; --cold-bg:#e1eefa;
+  --ok:#2b8a3e; --ok-bg:#e3f6e7;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --panel:#1b222a; --ink:#e6ebf0; --muted:#98a4b1; --line:#2d3742;
+  --accent:#ff7a3d; --accent-ink:#1a0d05; --accent-soft:#3a2216;
+  --hot:#ff8787; --hot-bg:#3b1c1f; --warm:#ffc061; --warm-bg:#352914; --cold:#74b6ef; --cold-bg:#16293b;
+  --ok:#69db7c; --ok-bg:#16301d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --panel:#1b222a; --ink:#e6ebf0; --muted:#98a4b1; --line:#2d3742;
+  --accent:#ff7a3d; --accent-ink:#1a0d05; --accent-soft:#3a2216;
+  --hot:#ff8787; --hot-bg:#3b1c1f; --warm:#ffc061; --warm-bg:#352914; --cold:#74b6ef; --cold-bg:#16293b;
+  --ok:#69db7c; --ok-bg:#16301d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 48px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{font:700 2rem/1 var(--f-display);letter-spacing:.01em;margin:0;text-wrap:balance}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:.35rem 0 0;max-width:62ch}
+h2{font:700 1.15rem/1.2 var(--f-display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:18px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:22px 14px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over,.drop:focus-visible{border-color:var(--accent);background:var(--accent-soft);outline:none}
+.drop strong{display:block;font-size:1.05rem}
+.drop small{color:var(--muted)}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.thumbs figure{margin:0;position:relative}
+.thumbs img{width:76px;height:76px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
+.thumbs button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:12px;line-height:1}
+label{font-weight:600;font-size:.85rem;display:block;margin:12px 0 4px}
+textarea,input[type=text],select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+textarea{min-height:80px;resize:vertical}
+textarea:focus,input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn{font:600 .95rem var(--f-body);border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);padding:11px 16px;width:100%;margin-top:14px;font-size:1rem}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.small{padding:4px 10px;font-size:.82rem}
+.status{font-size:.88rem;color:var(--muted);margin-top:8px;min-height:1.3em}
+.status.err{color:var(--hot)}
+.kw{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{font:500 .78rem var(--f-mono);padding:2px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line);white-space:nowrap}
+.chip.k-acquisto{background:var(--hot-bg);color:var(--hot);border-color:transparent}
+.chip.k-ricerca{background:var(--warm-bg);color:var(--warm);border-color:transparent}
+.chip.k-aiuto{background:var(--cold-bg);color:var(--cold);border-color:transparent}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted);margin-top:10px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.toolbar select,.toolbar input{width:auto;flex:1 1 140px}
+.counts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.count{flex:1 1 90px;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.count b{display:block;font:700 1.5rem/1 var(--f-display);font-variant-numeric:tabular-nums}
+.count span{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.lead{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:8px;min-width:0}
+.lead.caldo{border-left-color:var(--hot)} .lead.tiepido{border-left-color:var(--warm)} .lead.freddo{border-left-color:var(--cold)}
+.leads{display:grid;gap:10px}
+.lead-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.who{font-weight:600}
+.pill{font:600 .72rem var(--f-mono);text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:4px}
+.pill.caldo{background:var(--hot-bg);color:var(--hot)} .pill.tiepido{background:var(--warm-bg);color:var(--warm)} .pill.freddo{background:var(--cold-bg);color:var(--cold)}
+.quote{margin:0;padding:8px 10px;background:var(--bg);border-radius:6px;font-size:.92rem;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.82rem;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:500}
+.reply{border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:.9rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.reply-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row select{width:auto}
+.empty{color:var(--muted);text-align:center;padding:28px 12px;border:1px dashed var(--line);border-radius:8px}
+.results{display:grid;gap:10px;margin-top:14px}
+.note{font-size:.8rem;color:var(--muted);margin-top:14px}
+details summary{cursor:pointer;font-weight:600;font-size:.9rem;margin-top:12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Radar Clienti <span>xTool</span></h1>
+      <p class="sub">Carica gli screenshot dei messaggi (gruppo Facebook, WhatsApp, Messenger). Il radar legge il testo, trova chi vuole comprare, chi cerca una macchina e chi chiede aiuto, e ti prepara la risposta.</p>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="t-in">
+      <h2 id="t-in">1 · Nuovi messaggi</h2>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Carica screenshot">
+        <strong>Trascina qui gli screenshot</strong>
+        <small>oppure tocca per sceglierli · puoi anche incollarli (Ctrl+V)</small>
+      </div>
+      <input type="file" id="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <div class="thumbs" id="thumbs"></div>
+
+      <label for="txt">Oppure incolla il testo del messaggio</label>
+      <textarea id="txt" placeholder="Es.: Ciao a tutti, vorrei comprare un laser per tagliare compensato da 6 mm, cosa mi consigliate?"></textarea>
+
+      <button class="btn primary" id="go">Analizza messaggi</button>
+      <div class="status" id="status" role="status"></div>
+
+      <div class="legend">
+        <span><span class="chip k-acquisto">acquisto</span> vuole comprare</span>
+        <span><span class="chip k-ricerca">ricerca</span> sta cercando / confronta</span>
+        <span><span class="chip k-aiuto">aiuto</span> chiede supporto</span>
+      </div>
+
+      <details>
+        <summary>Parole chiave controllate</summary>
+        <div class="kw" id="kwlist"></div>
+      </details>
+
+      <div class="results" id="results"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="t-leads">
+      <h2 id="t-leads">2 · Persone da contattare</h2>
+      <div class="counts" id="counts"></div>
+      <div class="toolbar">
+        <select id="fStato" aria-label="Filtra per stato">
+          <option value="">Tutti gli stati</option>
+        </select>
+        <select id="fTemp" aria-label="Filtra per interesse">
+          <option value="">Tutti</option><option value="caldo">Caldi</option><option value="tiepido">Tiepidi</option><option value="freddo">Freddi</option>
+        </select>
+        <input type="text" id="fCerca" placeholder="Cerca nome o testo" aria-label="Cerca">
+      </div>
+      <div class="leads" id="leads">
+        <div class="empty">Qui compariranno le persone trovate negli screenshot.<br>Carica il primo screenshot a sinistra e premi <b>Analizza messaggi</b>.</div>
+      </div>
+      <p class="note">Gli screenshot non vengono salvati: il radar conserva solo nome, testo del messaggio e analisi. Contatta le persone rispondendo nel gruppo o in privato, con garbo e senza insistere.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+const KEYWORDS = {
+  acquisto: ["vorrei comprare","voglio comprare","devo comprare","sto per comprare","comprare","acquistare","acquisto","ordinare","prezzo","quanto costa","costo","offerta","sconto","promo","preventivo","dove compro","conviene","budget","finanziamento","rate"],
+  ricerca: ["cerco","sto cercando","cercavo","consiglio","consigliate","mi consigliate","quale macchina","quale laser","meglio","differenza","confronto","vs","alternativa","per iniziare","principiante","primo laser"],
+  aiuto: ["aiuto","help","non funziona","problema","errore","non taglia","non incide","bruciato","firmware","xtool creative space","xcs","parametri","impostazioni","assistenza","garanzia","rotto","calibrazione","messa a fuoco"]
+};
+const STATI = ["nuovo","contattato","in trattativa","demo fissata","cliente","non interessato"];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let images = [], sample = null, db = null, leads = [], imgLimits = null;
+
+function findKeywords(text){
+  const t = " " + (text||"").toLowerCase() + " ";
+  const out = [];
+  for (const [cat, list] of Object.entries(KEYWORDS))
+    for (const k of list) if (t.includes(k.length < 4 ? " " + k + " " : k)) out.push({cat, k});
+  return out;
+}
+function chips(list){ return list.map(x => `<span class="chip k-${x.cat}">${esc(x.k)}</span>`).join(""); }
+
+$("#kwlist").innerHTML = Object.entries(KEYWORDS).map(([c,l]) => chips(l.map(k=>({cat:c,k})))).join("");
+$("#fStato").innerHTML += STATI.map(s => `<option value="${s}">${s}</option>`).join("");
+
+// ---- screenshot input
+const drop = $("#drop"), file = $("#file");
+drop.onclick = () => file.click();
+drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); file.click(); } };
+file.onchange = () => { addImages(file.files); file.value = ""; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addImages(e.dataTransfer.files); };
+document.addEventListener("paste", e => {
+  const fs = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith("image/"));
+  if (fs.length) { e.preventDefault(); addImages(fs); }
+});
+function addImages(list){
+  const max = imgLimits?.maxCount || 5;
+  for (const f of list) {
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { setStatus("Formato non supportato: usa PNG o JPG.", true); continue; }
+    if (images.length >= max) { setStatus(`Massimo ${max} screenshot per volta. Analizza questi, poi carica gli altri.`, true); break; }
+    images.push({ f, url: URL.createObjectURL(f) });
+  }
+  renderThumbs();
+}
+function renderThumbs(){
+  $("#thumbs").innerHTML = images.map((im,i) => `<figure><img src="${im.url}" alt="Screenshot ${i+1}"><button data-i="${i}" aria-label="Rimuovi screenshot ${i+1}">✕</button></figure>`).join("");
+  $("#thumbs").querySelectorAll("button").forEach(b => b.onclick = () => { URL.revokeObjectURL(images[b.dataset.i].url); images.splice(+b.dataset.i,1); renderThumbs(); });
+}
+function setStatus(msg, err){ const s = $("#status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+// ---- analysis
+const PROMPT = `Sei l'assistente commerciale di un rivenditore/Host xTool in Italia.
+Ricevi screenshot di conversazioni (gruppo Facebook "xTool Official Italia", Messenger, WhatsApp) e/o testo incollato.
+
+COMPITO
+1. Trascrivi ogni messaggio leggibile: autore (nome come appare), testo, data/ora se visibile. Ignora pulsanti, pubblicità e interfaccia.
+2. Per OGNI messaggio scritto da una persona diversa da xTool/amministratori classifica l'intento:
+   - "acquisto": vuole comprare, chiede prezzo, preventivo, offerta, dove comprare.
+   - "ricerca": sta cercando o confrontando macchine/accessori/materiali, chiede consigli per iniziare.
+   - "aiuto": chiede supporto tecnico, problema, parametri, software, garanzia.
+   - "altro": nessuna opportunità (saluti, foto di lavori, battute).
+3. Interesse commerciale: "caldo" (pronto a comprare), "tiepido" (sta valutando o ha un problema risolvibile con un acquisto), "freddo" (solo aiuto/curiosità).
+4. Estrai ciò che si capisce del progetto seguendo lo schema: progetto, materiale, dimensione, volume di produzione, tecnologia citata, macchina posseduta o citata. Se non è scritto metti null. NON inventare.
+5. Scrivi una risposta in italiano, cordiale e breve (max 5 righe), da pubblicare come commento o messaggio privato:
+   - fai 1-2 domande per capire materiale, dimensioni e volume se mancano;
+   - per "aiuto" indica il Support Center ufficiale https://support.xtool.com/ e offri una mano;
+   - quando ha senso proponi una demo o un test materiale con la xTool Squad;
+   - NON scrivere prezzi, sconti, disponibilità, compatibilità o parametri come certi: se servono scrivi "lo verifico sul sito ufficiale xTool Europe e ti confermo";
+   - mai pressione commerciale, mai promesse.
+6. Indica il prossimo passo per il venditore (una frase).
+
+Rispondi SOLO con JSON valido in questa forma:
+{"messaggi":[{"autore":string|null,"testo":string,"data":string|null,"intento":"acquisto"|"ricerca"|"aiuto"|"altro","interesse":"caldo"|"tiepido"|"freddo","progetto":string|null,"materiale":string|null,"dimensione":string|null,"volume":string|null,"tecnologia":string|null,"macchina":string|null,"risposta":string,"prossimo_passo":string}]}`;
+
+$("#go").onclick = async () => {
+  const text = $("#txt").value.trim();
+  if (!images.length && !text) { setStatus("Carica almeno uno screenshot o incolla un messaggio.", true); return; }
+  if (!sample) { setStatus("L'analisi non è disponibile in questa vista. Apri la pagina da claude.ai con il tuo account.", true); return; }
+  if (images.length && !imgLimits) { setStatus("Questa vista non può leggere immagini: incolla il testo del messaggio.", true); return; }
+  const btn = $("#go"); btn.disabled = true;
+  setStatus("Sto leggendo i messaggi… (può richiedere fino a un minuto)");
+  try {
+    const input = PROMPT + (text ? `\n\nTESTO INCOLLATO:\n"""${text}"""` : "") + (images.length ? `\n\nSono allegati ${images.length} screenshot.` : "");
+    const opts = images.length ? { images: images.map(i => i.f) } : {};
+    const out = await sample.json(input, opts);
+    const msgs = (out?.messaggi || []).map(m => ({ ...m, parole: findKeywords(m.testo) }));
+    showResults(msgs);
+    const useful = msgs.filter(m => m.intento !== "altro" || m.parole.length);
+    let saved = 0;
+    if (db) for (const m of useful) { if (await saveLead(m)) saved++; }
+    setStatus(`${msgs.length} messaggi letti · ${useful.length} opportunità` + (db ? ` · ${saved} nuove persone salvate` : " · salvataggio non disponibile"));
+    images.forEach(i => URL.revokeObjectURL(i.url)); images = []; renderThumbs(); $("#txt").value = "";
+  } catch (e) {
+    const msg = { not_granted: "Serve il tuo permesso per usare Claude: riprova e accetta la richiesta.", rate_limited: "Troppe richieste ravvicinate: aspetta un minuto e riprova.", image_rejected: "Uno screenshot non è leggibile: prova con un'immagine PNG o JPG più piccola.", images_unavailable: "Questa vista non può leggere immagini: incolla il testo." }[e?.code];
+    setStatus(msg || "Analisi non riuscita: " + (e?.message || "errore sconosciuto") + ". Riprova.", true);
+  } finally { btn.disabled = false; }
+};
+
+function showResults(msgs){
+  if (!msgs.length) { $("#results").innerHTML = `<div class="empty">Nessun messaggio leggibile negli screenshot.</div>`; return; }
+  $("#results").innerHTML = `<h2 style="margin-top:6px">Risultato analisi</h2>` + msgs.map(m => `
+    <div class="lead ${m.intento==="altro"?"":esc(m.interesse)}">
+      <div class="lead-head"><span class="who">${esc(m.autore || "Autore non visibile")}</span>${m.intento!=="altro"?`<span class="pill ${esc(m.interesse)}">${esc(m.intento)} · ${esc(m.interesse)}</span>`:`<span class="chip">nessuna opportunità</span>`}</div>
+      <p class="quote">${esc(m.testo)}</p>
+      ${m.parole.length?`<div class="kw">${chips(m.parole)}</div>`:""}
+    </div>`).join("");
+}
+
+function leadKey(m){ return ((m.autore||"") + "|" + (m.testo||"").slice(0,120)).toLowerCase().replace(/\s+/g," ").trim(); }
+async function saveLead(m){
+  const key = leadKey(m);
+  if (leads.some(l => l.chiave === key)) return false;
+  try {
+    await db.collection("leads").add({
+      chiave: key, autore: m.autore || null, testo: m.testo, data_messaggio: m.data || null,
+      intento: m.intento, interesse: m.interesse, parole: m.parole.map(p => p.k),
+      progetto: m.progetto||null, materiale: m.materiale||null, dimensione: m.dimensione||null, volume: m.volume||null,
+      tecnologia: m.tecnologia||null, macchina: m.macchina||null,
+      risposta: m.risposta || "", prossimo_passo: m.prossimo_passo || "",
+      stato: "nuovo", note: "", creato: new Date().toISOString()
+    });
+    return true;
+  } catch (e) { setStatus("Non riesco a salvare: " + (e?.message || e?.code || "errore") + ".", true); return false; }
+}
+
+// ---- leads list
+function renderLeads(){
+  const fs = $("#fStato").value, ft = $("#fTemp").value, q = $("#fCerca").value.trim().toLowerCase();
+  const tot = n => leads.filter(n).length;
+  $("#counts").innerHTML = [
+    ["Caldi", tot(l=>l.interesse==="caldo" && !["cliente","non interessato"].includes(l.stato))],
+    ["Da contattare", tot(l=>l.stato==="nuovo")],
+    ["Demo fissate", tot(l=>l.stato==="demo fissata")],
+    ["Clienti", tot(l=>l.stato==="cliente")]
+  ].map(([k,v]) => `<div class="count"><b>${v}</b><span>${k}</span></div>`).join("");
+  const list = leads.filter(l => (!fs || l.stato===fs) && (!ft || l.interesse===ft) && (!q || ((l.autore||"")+" "+l.testo).toLowerCase().includes(q)));
+  if (!leads.length) { $("#leads").innerHTML = `<div class="empty">Qui compariranno le persone trovate negli screenshot.<br>Carica il primo screenshot a sinistra e premi <b>Analizza messaggi</b>.</div>`; return; }
+  if (!list.length) { $("#leads").innerHTML = `<div class="empty">Nessuna persona con questi filtri.</div>`; return; }
+  const meta = (k,v) => v ? `<span>${k}: <b>${esc(v)}</b></span>` : "";
+  $("#leads").innerHTML = list.map(l => `
+    <article class="lead ${esc(l.interesse)}" data-id="${esc(l.id)}">
+      <div class="lead-head"><span class="who">${esc(l.autore || "Autore non visibile")}</span><span class="pill ${esc(l.interesse)}">${esc(l.intento)} · ${esc(l.interesse)}</span></div>
+      <p class="quote">${esc(l.testo)}</p>
+      ${(l.parole||[]).length?`<div class="kw">${(l.parole||[]).map(k=>`<span class="chip">${esc(k)}</span>`).join("")}</div>`:""}
+      <div class="meta">${meta("Progetto",l.progetto)}${meta("Materiale",l.materiale)}${meta("Dimensione",l.dimensione)}${meta("Volume",l.volume)}${meta("Tecnologia",l.tecnologia)}${meta("Macchina",l.macchina)}${meta("Messaggio del",l.data_messaggio)}</div>
+      ${l.prossimo_passo?`<div class="meta"><span>Prossimo passo: <b>${esc(l.prossimo_passo)}</b></span></div>`:""}
+      <div><div class="reply-label">Risposta suggerita</div><div class="reply">${esc(l.risposta)}</div></div>
+      <div class="row">
+        <button class="btn small" data-act="copy">Copia risposta</button>
+        <select data-act="stato" aria-label="Stato">${STATI.map(s=>`<option ${s===l.stato?"selected":""}>${s}</option>`).join("")}</select>
+        <input type="text" data-act="note" value="${esc(l.note)}" placeholder="Note (telefono, città, prossimo contatto…)" aria-label="Note" style="flex:1 1 180px;width:auto">
+      </div>
+    </article>`).join("");
+}
+$("#leads").addEventListener("click", async e => {
+  const b = e.target.closest("[data-act=copy]"); if (!b) return;
+  const art = b.closest("article"), txt = art.querySelector(".reply").textContent;
+  try { await navigator.clipboard.writeText(txt); b.textContent = "Copiata"; setTimeout(()=>b.textContent="Copia risposta",1500); }
+  catch { const r = document.createRange(); r.selectNodeContents(art.querySelector(".reply")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Testo selezionato: premi Copia"; }
+});
+$("#leads").addEventListener("change", async e => {
+  const el = e.target, id = el.closest("article")?.dataset.id; if (!id || !db) return;
+  const field = el.dataset.act === "stato" ? "stato" : el.dataset.act === "note" ? "note" : null; if (!field) return;
+  try { await db.collection("leads").doc(id).update({ [field]: el.value }); }
+  catch (err) { setStatus("Modifica non salvata: " + (err?.message || "permesso negato") + ".", true); }
+});
+["#fStato","#fTemp"].forEach(s => $(s).onchange = renderLeads);
+$("#fCerca").oninput = renderLeads;
+
+// ---- boot
+(async () => {
+  if (!window.claude?.use) { setStatus("Apri questa pagina da claude.ai per usare l'analisi e il salvataggio."); return; }
+  claude.use("sample").then(async s => {
+    sample = s;
+    if (!s) { setStatus("Analisi non disponibile in questa vista."); return; }
+    imgLimits = (await s.limits().catch(() => null))?.images || null;
+    if (!imgLimits) setStatus("In questa vista puoi incollare solo testo (niente screenshot).");
+  });
+  claude.use("db").then(d => {
+    db = d;
+    if (!d) return;
+    d.collection("leads").orderBy("creato","desc").limit(500).onSnapshot(snap => {
+      leads = snap.docs.map(x => ({ id: x.id, ...x.data() }));
+      renderLeads();
+    }, err => setStatus("Lista clienti non disponibile: " + (err?.message || "errore") + ".", true));
+  });
+})();
+</script>
