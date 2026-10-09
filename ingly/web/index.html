@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>INGLY Agent Control Center</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <form id="login-form" class="login-card" autocomplete="on">
+    <div class="brand-mark">INGLY<span>DESIGN</span></div>
+    <p class="muted">Agent Control Center</p>
+    <label for="login-email">Email</label>
+    <input id="login-email" type="email" required autocomplete="username">
+    <label for="login-password">Password</label>
+    <input id="login-password" type="password" required autocomplete="current-password">
+    <button class="btn primary" type="submit">Accedi</button>
+    <p id="login-error" class="error" role="alert"></p>
+  </form>
+</div>
+
+<div id="shell" class="shell" hidden>
+  <aside id="sidebar" class="sidebar" aria-label="Navigazione">
+    <div class="brand-mark small">INGLY<span>DESIGN</span></div>
+    <nav id="nav"></nav>
+    <div class="sidebar-foot">
+      <span id="user-email" class="muted"></span>
+      <button id="theme-toggle" class="btn ghost small" type="button">Tema</button>
+      <button id="logout" class="btn ghost small" type="button">Esci</button>
+    </div>
+  </aside>
+  <div class="main-wrap">
+    <header class="topbar">
+      <button id="menu-toggle" class="btn ghost small menu-btn" type="button" aria-controls="sidebar" aria-expanded="false">Menu</button>
+      <h1 id="page-title">Overview</h1>
+      <div id="agent-state" class="agent-state"></div>
+    </header>
+    <main id="main" tabindex="-1"></main>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="modal"><div id="modal-body"></div></dialog>
+</body>
+</html>
