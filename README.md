@@ -7,14 +7,23 @@ dalle fonti ufficiali, monitora i canali autorizzati, prepara risposte basate su
 L'agente parla come INGLY DESIGN, realtà indipendente: non si presenta mai come xTool.
 
 ## Avvio rapido
+
+**Produzione (PostgreSQL + pgvector):** `cp .env.example .env`, compila, poi `docker compose up -d --build`
+(dettagli in docs/DEPLOYMENT.md).
+
+**Sviluppo locale (SQLite, nessuna installazione extra):**
 ```bash
 pip install -r requirements.txt
 cp .env.example .env && python -m ingly gen-key   # metti la chiave in INGLY_TOKEN_ENCRYPTION_KEY
 set -a; . ./.env; set +a
 python -m ingly migrate && python -m ingly serve  # http://127.0.0.1:8000
 python -m ingly worker                            # in un altro terminale
-python -m pytest -q                               # 47 test
+python -m pytest -q                               # 88 test (anche su PostgreSQL con INGLY_TEST_DATABASE_URL)
 ```
+
+Il prompt di sistema attivo è **INGLY xTool Expert Agent — System Prompt v1.0**
+(`ingly/response/prompts/responder_v2.md`). Tutte le categorie partono in **DRAFT**: nessuna pubblicazione
+finché non lo decidi tu.
 
 ## Documentazione
 | Documento | Contenuto |
@@ -25,14 +34,16 @@ python -m pytest -q                               # 47 test
 | [docs/AI_PROVIDER.md](docs/AI_PROVIDER.md) | configurazione del provider AI, budget, prompt versionato |
 | [docs/META_SETUP.md](docs/META_SETUP.md) | collegare Facebook e Instagram |
 | [docs/KNOWLEDGE_BASE.md](docs/KNOWLEDGE_BASE.md) | caricare e aggiornare la knowledge base |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker, HTTPS, backup, checklist produzione |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker con PostgreSQL, HTTPS, backup, checklist produzione |
+| [docs/API.md](docs/API.md) | tutte le rotte con il permesso richiesto |
+| [docs/SECURITY_PRIVACY.md](docs/SECURITY_PRIVACY.md) | sicurezza, segreti, GDPR, backup, audit |
 | [docs/API_LIMITATIONS.md](docs/API_LIMITATIONS.md) | cosa le piattaforme non consentono |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | prossimi passi e funzionalità non ancora disponibili |
 | [docs/TEST_REPORT.md](docs/TEST_REPORT.md) | risultati dei test e della valutazione |
 
 ## Struttura
 - `ingly/` — applicazione (API, knowledge engine, social, risposte, automazioni, CRM, job, dashboard in `ingly/web`)
-- `ingly/migrations/` — schema del database
+- `ingly/migrations/postgres` e `ingly/migrations/sqlite` — schema del database
 - `tests/` — test automatici; `evals/` — casi di valutazione
 - `AGENT.md` — regole operative dell'agente (fonti, gerarchia, "non inventare", flusso utente → post-vendita)
 - `knowledge/` — registro delle fonti ufficiali e schede YAML (modelli; importabili con `python -m ingly import-yaml`)

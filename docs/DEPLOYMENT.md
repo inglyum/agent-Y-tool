@@ -6,7 +6,8 @@ cp .env.example .env   # compila, con INGLY_COOKIE_SECURE=true e INGLY_ENV=produ
 docker compose up -d --build
 docker compose exec web python -m ingly create-user tua@email.it --role admin
 ```
-`web` (API + dashboard) e `worker` (job) condividono il volume `/data` con il database SQLite.
+Servizi: `db` (PostgreSQL 16 con pgvector, immagine `pgvector/pgvector:pg16`), `web` (applica le migrazioni
+e avvia API + dashboard), `worker` (job). Imposta `POSTGRES_PASSWORD` in `.env`.
 Esponi `web` solo dietro un reverse proxy con HTTPS (Caddy, nginx, Traefik).
 
 ### Esempio Caddy
@@ -24,12 +25,12 @@ con `EnvironmentFile=/etc/ingly.env` e utente di sistema dedicato.
 - [ ] HTTPS attivo e `INGLY_COOKIE_SECURE=true`
 - [ ] `INGLY_TOKEN_ENCRYPTION_KEY` salvata in un secret manager (se la perdi i token vanno ricollegati)
 - [ ] `.env` con permessi 600, mai in Git
-- [ ] backup giornaliero: `python -m ingly backup /backup/ingly-$(date +%F).db` (cron) e prova di ripristino
+- [ ] backup giornaliero: `docker compose exec web python -m ingly backup /data/ingly-$(date +%F).dump`
+      (usa `pg_dump`), copiato fuori dal server; prova di ripristino con `python -m ingly restore <file>`
 - [ ] worker attivo (senza worker niente crawling, polling, retention, controllo token)
 - [ ] webhook Meta puntati su `https://dominio/webhooks/meta`
 - [ ] retention lead impostata e informativa privacy pubblicata sul sito INGLY
 
 ## Scalabilità
-SQLite in WAL regge un'istanza web + un worker con il volume di una piccola attività. Per più worker
-o più istanze, migra a PostgreSQL: lo schema è SQL standard tranne la tabella FTS5 (sostituibile con
-`tsvector` o un motore di ricerca dedicato).
+Con PostgreSQL più worker possono girare insieme: i job sono prelevati con `FOR UPDATE SKIP LOCKED`.
+SQLite è adatto solo a sviluppo e prove (un'istanza web + un worker).

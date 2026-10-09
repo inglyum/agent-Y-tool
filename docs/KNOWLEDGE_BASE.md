@@ -6,7 +6,10 @@ xTool Europe Italia e catalogo → Support Center → manuali → Academy → Sq
 community maker → fonti indipendenti. Nel ranking le fonti ufficiali pesano di più; le community non
 sostituiscono mai una specifica ufficiale e nel prompt sono marcate come "COMMUNITY/ESPERIENZA".
 
-## Tre modi di alimentarla
+## Quattro modi di alimentarla
+
+0. **Acquisizione di un URL** (Knowledge Base → Acquisisci un URL pubblico, o `POST /api/kb/ingest-url`):
+   solo per pagine dei domini registrati come fonti, rispettando robots.txt, con protezione SSRF.
 
 1. **Import di documenti** (consigliato per iniziare): dashboard → Knowledge Base → Importa documento,
    oppure `python -m ingly import xtool_support manuale.pdf --url https://support.xtool.com/...`.
@@ -25,8 +28,17 @@ sostituiscono mai una specifica ufficiale e nel prompt sono marcate come "COMMUN
 - stesso contenuto a un altro URL → registrato come duplicato, senza duplicare l'indice;
 - pagina 404/410 → documento `gone`, escluso dalle ricerche, notifica.
 
+## Rimozione e fonti da riverificare
+- **Rimuovi** un documento dalla dashboard (con motivo): esce subito da ricerche e risposte; le versioni restano per l'audit.
+- **Fonti da riverificare**: documenti non ricontrollati da più di 30 giorni. Nelle citazioni compare
+  "da riverificare" oltre i 90 giorni e la ricerca li penalizza.
+
+## Ricerca ibrida ed embedding
+Con l'embedder predefinito (`hashing`) la ricerca trova anche parole con refusi o varianti, ma non sinonimi.
+Per una ricerca semantica imposta `INGLY_EMBEDDINGS_PROVIDER=voyage` e la chiave, poi `python -m ingly reembed`.
+
 ## Riconoscimento dei prodotti
-Aggiungi alias ai prodotti (es. nome commerciale abbreviato) e premi "reindicizza": i chunk vengono
+Aggiungi alias ai prodotti (es. nome commerciale abbreviato) e reindicizza (`python -m ingly reembed`): i chunk vengono
 etichettati con i prodotti citati e la ricerca privilegia quelli della domanda.
 
 ## Dati in conflitto

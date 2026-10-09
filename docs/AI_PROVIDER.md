@@ -37,6 +37,10 @@ e registrala in `build_provider`. Il resto del sistema non cambia.
 
 ## Prompt di sistema
 
-Il prompt della risposta è versionato in database (seed da `ingly/response/prompts/responder_v1.md`).
+Attivo: **INGLY xTool Expert Agent — System Prompt v1.0** (`ingly/response/prompts/responder_v2.md`), con in coda
+un "formato tecnico" vincolante (fonti S1…, conflitti, ipotesi, JSON). La versione precedente resta in archivio.
+All'avvio il sistema registra i file presenti e attiva il più recente **solo se** la versione attiva non è stata
+creata da un utente: le personalizzazioni fatte da dashboard non vengono mai sovrascritte.
+Il prompt della risposta è versionato in database.
 Da **AI Agent** puoi creare una nuova versione e attivarla; ogni cambio è registrato nell'audit log.
 Prima di attivarla, esegui **Test e Valutazione AI** e confronta le metriche con l'esecuzione precedente.

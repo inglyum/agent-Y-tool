@@ -33,6 +33,12 @@
    `X-Hub-Signature-256` (HMAC con l'app secret); senza firma valida la richiesta è rifiutata.
    Senza webhook il sistema usa il polling alla frequenza impostata sulla fonte.
 
+## Pubblicazione: cosa serve
+Tutte le categorie partono in **DRAFT**: il sistema prepara bozze e non pubblica nulla. Per pubblicare via API
+una categoria deve essere in **APPROVAL** (pubblica una persona dopo l'approvazione) o **AUTO_SAFE**
+(automatica, solo dopo lo sblocco verificato in Automazioni). La policy è controllata lato server a ogni
+pubblicazione.
+
 ## Token, scadenze, disconnessione
 
 - I token sono salvati **cifrati** (Fernet) e mai scritti nei log o nell'audit.

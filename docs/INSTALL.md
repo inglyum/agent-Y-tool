@@ -1,6 +1,7 @@
 # Installazione
 
-Requisiti: Python 3.11+, SQLite con FTS5 (incluso in Python standard).
+Requisiti: Python 3.11+. Produzione: PostgreSQL 14+ con estensione **pgvector** (vedi docs/DEPLOYMENT.md).
+Sviluppo: basta SQLite (incluso in Python), senza installare altro.
 
 ```bash
 git clone <repo> && cd agent-Y-tool
@@ -25,8 +26,9 @@ In alternativa all'amministratore da `.env`: `python -m ingly create-user tua@em
    abilita il crawling in **Fonti e Crawler** dopo aver verificato le condizioni d'uso del sito.
 4. **Social Listening → Import manuale**: incolla domande dal gruppo Facebook e lavora dalla **Coda Risposte**.
 5. **Facebook / Instagram**: collega la Pagina INGLY quando la app Meta è pronta (docs/META_SETUP.md).
-6. **Automazioni**: tutto parte in APPROVAL. Passa una categoria ad AUTO_SAFE solo dopo aver controllato
-   la qualità delle bozze e le metriche di **Test e Valutazione AI**.
+6. **Automazioni**: tutto parte in **DRAFT** (solo bozze). Passa a APPROVAL le categorie che vuoi pubblicare
+   via API dopo approvazione. AUTO_SAFE resta bloccato finché una valutazione recente, con il provider AI attivo,
+   non supera le soglie (**AI Tests** → poi **Automazioni → Sblocca AUTO_SAFE**).
 
 ## Comandi
 
@@ -40,4 +42,7 @@ In alternativa all'amministratore da `.env`: `python -m ingly create-user tua@em
 | `python -m ingly import-yaml` | importa le schede YAML in `knowledge/` |
 | `python -m ingly eval` | valutazione sui casi di `evals/cases.yaml` |
 | `python -m ingly backup [dest]` / `restore <src>` | backup consistente / ripristino |
-| `python -m pytest -q` | test automatici |
+| `python -m ingly reembed` | ricalcola embedding e prodotti citati |
+| `python -m pytest -q` | test automatici (SQLite) |
+| `INGLY_TEST_DATABASE_URL=postgresql://… python -m pytest -q` | stessi test su PostgreSQL (crea e cancella un database per test) |
+| `python scripts/gen_api_docs.py` | rigenera docs/API.md |

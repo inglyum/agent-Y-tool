@@ -21,10 +21,25 @@ knowledge)       │                    │                  │                
                                AI Core (ingly/ai/provider.py)
                                interfaccia AIProvider + MeteredAI (budget, uso, errori)
                 │
-        Job scheduler (ingly/jobs/scheduler.py) — coda SQLite, lease, backoff, dead-letter
+        Job scheduler (ingly/jobs/scheduler.py) — coda nel database, lease, backoff, dead-letter
                 │
-        SQLite + FTS5 (ingly/migrations/*.sql) — audit log, impostazioni, prompt versionati
+        PostgreSQL + pgvector (produzione)  |  SQLite + FTS5 (sviluppo/test)
+        ingly/migrations/{postgres,sqlite}/ — stesso schema, audit, impostazioni, prompt versionati
 ```
+
+## Scelte di stack
+Monolite modulare in **Python 3.11 + FastAPI**, dashboard in JavaScript senza build, worker separato,
+**PostgreSQL con pgvector** in produzione. SQLite resta per sviluppo e test veloci: la stessa suite gira su
+entrambi (`INGLY_TEST_DATABASE_URL`). Il backend non è stato riscritto in TypeScript: era già funzionante e
+testato, e il prompt chiede di non sovrascrivere funzionalità valide. Il controllo dei tipi TypeScript sul
+frontend (`tsc --checkJs`) segnala solo tipizzazioni DOM generiche, non difetti: non giustifica una fase di build.
+
+## Ricerca
+Ibrida: full-text (tsvector `simple` su PostgreSQL, FTS5 su SQLite) + vettoriale (pgvector, o calcolo in memoria
+su SQLite), fuse con Reciprocal Rank Fusion e pesate per autorevolezza della fonte, freschezza, prodotto citato e
+copertura dei termini nel singolo passaggio. Embedder predefinito offline (`hashing`, tollera refusi ma non è
+semantico); `voyage` per embedding semantici. Le citazioni riportano URL, titolo, sezione, pagina, data di
+acquisizione e un avviso se la fonte va riverificata.
 
 ## Principi
 
@@ -32,8 +47,11 @@ knowledge)       │                    │                  │                
   confidenza). Recupero fonti, decisione e azioni esterne sono codice deterministico.
 - **Le regole di rischio non dipendono dall'AI.** `classify_rules` gira sempre; l'AI può affinare solo
   i casi ambigui (`merge_ai`) e non annulla segnali espliciti o rischi.
-- **Nessuna azione esterna senza policy.** La pubblicazione passa da `PolicyEngine.decide` (auto) o da
-  approvazione umana, con kill switch, quote e chiave di idempotenza (`published_responses.idempotency_key`).
+- **Nessuna azione esterna senza policy.** Ogni pubblicazione, manuale o automatica, passa da
+  `PolicyEngine.authorize_publish`: modalità della categoria (OFF/MONITOR/DRAFT rifiutano), approvazione
+  esplicita in APPROVAL, AUTO_SAFE solo se sbloccato da una valutazione superata, rivalidazione del testo
+  attuale, quote e kill switch; poi chiave di idempotenza (`published_responses.idempotency_key`).
+  Modalità iniziale: DRAFT.
 - **Contenuto esterno = dato.** Post e pagine sono racchiusi in `<contenuto_esterno>`/`<fonte>` con i tag
   di chiusura neutralizzati (`escape_external`); i segnali di prompt injection forzano la revisione.
 - **Nessun dato inventato.** Catalogo e KB contengono solo ciò che arriva da fonti importate o inserite

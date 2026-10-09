@@ -1,44 +1,49 @@
 # Stato dell'implementazione
 
-Aggiornato: 2026-10-09
+Aggiornato: 2026-10-09 · 88 test verdi su SQLite e su PostgreSQL 16 + pgvector.
 
-## Fasi
+## Audit di partenza (seconda iterazione)
+Il repository conteneva già l'applicazione Python/FastAPI (backend, dashboard, 47 test). Mancavano rispetto al
+nuovo prompt: PostgreSQL + pgvector, ricerca ibrida, acquisizione URL con protezione SSRF, modalità iniziale DRAFT
+con AUTO_SAFE bloccato, autorizzazione lato server di ogni pubblicazione, System Prompt v1.0, tabelle
+`workspaces`/`consents`/`audit_events`/`ai_usage`, guida sicurezza/privacy, documentazione API.
+Decisione: **mantenere Python** (funzionante e testato) invece di riscrivere in TypeScript; aggiungere PostgreSQL
+mantenendo SQLite per sviluppo e test.
 
-| Fase | Stato | Note |
-|---|---|---|
-| A — Audit del repository | ✔ | Repository con sole istruzioni (`AGENT.md`), registro fonti, schemi YAML vuoti, validatore e pagina Radar Clienti. Nessun segreto. Tutto conservato. |
-| B — Architettura e piano | ✔ | `docs/ARCHITECTURE.md` |
-| C — Database e backend | ✔ | SQLite + migrazioni, FastAPI, CLI |
-| D — Knowledge ingestion e RAG | ✔ codice · ✖ dati | Funziona con import e crawling; KB reale vuota (siti xTool non raggiungibili da qui) |
-| E — Dashboard | ✔ | 20 sezioni, chiaro/scuro, mobile, provata nel browser |
-| F — Social connectors | ✔ codice · ⏳ credenziali | Meta Graph testata con risposte simulate; serve app Meta + App Review |
-| G — Response Engine | ✔ | Funziona senza AI (regole + bozze prudenti); con provider Anthropic serve la chiave |
-| H — CRM e lead | ✔ | |
-| I — Automazioni e sicurezza | ✔ | Default prudente: tutto in APPROVAL |
-| J — Test, documentazione, deployment | ✔ | 47 test, valutazione, Docker, guide |
+## ✅ Completo e verificato
+| Area | Note |
+|---|---|
+| Autenticazione e permessi | sessioni, CSRF, ruoli, blocco tentativi; tutte le rotte /api protette (test) |
+| Database | migrazioni versionate per PostgreSQL (pgvector, tsvector) e SQLite; vincoli, indici, cascade |
+| Knowledge base | import PDF/HTML, acquisizione URL di fonti registrate, crawler (robots, sitemap, GET condizionali), versioni, checksum, deduplica, rimozione, fonti obsolete, conflitti |
+| Ricerca e citazioni | ibrida full-text + vettoriale; citazioni con URL, titolo, sezione, pagina, data di acquisizione |
+| Risposte | System Prompt v1.0 versionato, fonti obbligatorie, ipotesi segnalate, validatore (prezzi, dati tecnici, link, affiliazione, sicurezza, istruzioni interne, duplicati) |
+| Policy | OFF/MONITOR/DRAFT/APPROVAL/AUTO_SAFE; DRAFT iniziale; AUTO_SAFE bloccato fino a valutazione superata; ogni pubblicazione riautorizzata lato server; kill switch; quote; idempotenza |
+| CRM | pipeline NEW→WON/LOST, opportunità solo da interesse concreto, consensi, export, cancellazione, retention |
+| Job | coda nel database, lease, backoff, dead-letter, pianificazioni, SKIP LOCKED su PostgreSQL |
+| Sicurezza | SSRF guard, CSP, redazione log, token cifrati, backup/ripristino (pg_dump/pg_restore) |
+| Dashboard | 20 sezioni, chiaro/scuro, mobile, stati reali di connessione e cosa manca |
+| Test e documentazione | 88 test su due database, valutazione deterministica, guide in docs/ |
 
-## Funziona davvero, oggi
-- Login, ruoli (admin/editor/sales/viewer), CSRF, blocco tentativi, audit con redazione.
-- Import manuale di messaggi (es. dal gruppo Facebook) → classificazione → bozza → coda di revisione → lead.
-- Import PDF/HTML nella KB con versioni, deduplica, ricerca e citazioni.
-- Crawler (robots.txt, sitemap, GET condizionali, stop su blocchi) — provato su siti simulati.
-- Catalogo con stato di verifica, campi mancanti, compatibilità prudente, conflitti tra fonti.
-- Policy di automazione, kill switch, quote, pubblicazione idempotente.
-- Scheduler con retry, dead-letter, pianificazioni; backup/ripristino.
+## 🟡 Parziale
+| Area | Cosa manca |
+|---|---|
+| Ricerca semantica | embedder predefinito offline non semantico; adattatore Voyage scritto ma non provato dal vivo |
+| Workspace | tabella e legame utenti presenti; i dati non sono ancora separati per workspace (un solo workspace: INGLY DESIGN) |
+| Valutazione | 16 casi scritti a mano; servono casi reali con risposte di riferimento |
+| TypeScript | non adottato: backend Python esistente mantenuto; frontend JS senza build (controllo tsc solo informativo) |
 
-## Richiede credenziali o approvazioni esterne
-- **Meta**: app, `META_APP_ID`/`META_APP_SECRET`/`META_REDIRECT_URI`/`META_WEBHOOK_VERIFY_TOKEN`, App Review.
-  Fino ad allora Facebook e Instagram mostrano "non configurato": nessun collegamento è simulato.
-- **Provider AI**: `INGLY_AI_PROVIDER=anthropic` + chiave. Senza, le bozze sono domande di chiarimento prudenti.
-- **Dati xTool reali**: da importare dall'ambiente di produzione.
-
-## Simulato (solo nei test)
-Provider AI finto, siti web finti, Graph API finta, pagine HTML di una macchina fittizia. Nulla di questo è nel database applicativo.
+## ⛔ Bloccato da elementi esterni
+| Blocco | Cosa serve |
+|---|---|
+| Dati xTool reali | i siti xtool.eu, xtool.com, support.xtool.com non erano raggiungibili da questo ambiente: KB e catalogo vuoti |
+| Facebook / Instagram | app Meta, credenziali in `.env`, App Review; fino ad allora "non configurato" (nessun collegamento simulato) |
+| Gruppi Facebook di terzi | nessuna API Meta: solo import manuale e pubblicazione a mano |
+| Provider AI | `INGLY_AI_PROVIDER=anthropic` e chiave; senza, bozze prudenti di chiarimento |
+| Deploy | un server con HTTPS (docker-compose pronto) |
 
 ## Prossimo passo preciso
-1. Deploy (docs/DEPLOYMENT.md) con HTTPS e worker attivo.
-2. Importare 5-10 manuali ufficiali dal Support Center e abilitare il crawling di `xtool_support` con `--max-pages 50`;
-   controllare "Novità rilevate" e la qualità della ricerca.
-3. Configurare il provider AI ed eseguire **Test e Valutazione AI**; aggiungere casi reali a `evals/cases.yaml`.
-4. Creare l'app Meta, collegare la Pagina INGLY, lavorare 2-4 settimane in APPROVAL prima di valutare AUTO_SAFE
-   per la sola categoria `technical`.
+1. Deploy con `docker compose up -d` (PostgreSQL incluso) dietro HTTPS; creare l'amministratore.
+2. Importare i primi manuali ufficiali e acquisire le pagine chiave di support.xtool.com con "Acquisisci un URL".
+3. Configurare il provider AI, eseguire **AI Tests** e aggiungere casi reali a `evals/cases.yaml`.
+4. Lavorare in DRAFT dalla Coda Risposte; creare l'app Meta e passare in APPROVAL le categorie mature.

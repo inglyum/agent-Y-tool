@@ -14,6 +14,7 @@ Queste limitazioni sono scelte di progetto o vincoli esterni: il sistema le most
 | Token revocabili in qualsiasi momento | Controllo periodico `debug_token`, stato `expired`, nessun retry inutile |
 | Siti xTool: condizioni d'uso, robots.txt, protezioni anti-bot | Crawling disattivato di default; stop su 401/403/429; nessuna elusione |
 | Contenuti dinamici (prezzi, disponibilità, promo) | Mai riportati se non presenti testualmente in una fonte ufficiale; invito a verificare sul sito |
+| Embedding semantici (Voyage) | Adattatore scritto ma non provato dal vivo: l'API non era raggiungibile da questo ambiente |
 | Ambiente di sviluppo di questa sessione | xtool.eu, xtool.com, support.xtool.com e graph.facebook.com non raggiungibili: KB vuota e connettori testati solo con risposte simulate |
 
 I nomi di permessi, campi ed endpoint Meta in `ingly/social/meta.py` vanno ricontrollati sulla

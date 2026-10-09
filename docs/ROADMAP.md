@@ -15,11 +15,11 @@ con validazione, policy di automazione, connettori Meta (codice), import manuale
    e risposte di riferimento scritte da INGLY; aggiungere un giudizio umano periodico sul tono.
 
 ## Funzionalità non ancora disponibili
-- Ricerca **vettoriale/semantica** (oggi BM25 full-text con sinonimi via alias): interfaccia `Retriever`
-  pronta per affiancare embeddings.
+- Ricerca **semantica** provata dal vivo: oggi ibrida con embedder offline non semantico; adattatore Voyage da verificare.
+- **Workspace multipli**: la tabella esiste e gli utenti sono legati al workspace INGLY, ma i dati non sono ancora separati per workspace.
+- Indice ANN (HNSW) su pgvector quando i chunk superano qualche decina di migliaia (oggi ricerca esatta).
 - **Interfaccia multilingua** della dashboard (oggi italiano; le risposte supportano italiano e inglese).
 - **Adattatori CRM esterni** (HubSpot, Pipedrive…): oggi CRM integrato con export per lead.
 - **Calendario demo** integrato: oggi URL di prenotazione configurabile e attività con scadenza.
-- **PostgreSQL** per più worker/istanze.
 - **Notifiche** (email/Telegram) per lead caldi e bozze ad alta priorità.
 - **Retention automatica dei documenti KB** oltre alle versioni (oggi conservate tutte).

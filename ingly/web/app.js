@@ -2,12 +2,12 @@
 /* INGLY Agent Control Center — dashboard vanilla JS. Tutti i dati inseriti nell'HTML passano da esc(). */
 
 const SECTIONS = [
-  ["overview", "Overview"], ["agent", "AI Agent"], ["kb", "xTool Knowledge Base"], ["products", "Prodotti e Macchine"],
+  ["overview", "Overview"], ["agent", "AI Agent"], ["kb", "Knowledge Base"], ["products", "Macchine e Prodotti"],
   ["accessories", "Accessori e Compatibilità"], ["materials", "Materiali"], ["sources", "Fonti e Crawler"],
   ["listening", "Social Listening"], ["facebook", "Facebook"], ["instagram", "Instagram"], ["queue", "Coda Risposte"],
-  ["leads", "Lead CRM"], ["requests", "Demo e Corsi"], ["analytics", "Analytics"], ["eval", "Test e Valutazione AI"],
-  ["automation", "Automazioni"], ["users", "Utenti e Permessi"], ["security", "Sicurezza e Audit"],
-  ["settings", "Impostazioni"], ["usage", "Costi e Utilizzo AI"],
+  ["leads", "Lead CRM"], ["requests", "Demo e Corsi"], ["analytics", "Analytics"], ["eval", "AI Tests"],
+  ["automation", "Automazioni"], ["users", "Utenti e Permessi"], ["security", "Security & Audit"],
+  ["settings", "Settings"], ["usage", "AI Costs"],
 ];
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -69,6 +69,8 @@ function bars(rows, labelKey, valueKey, emptyMsg) {
   return html;
 }
 function applyBarWidths(root) { root.querySelectorAll(".fill[data-w]").forEach((el) => { el.style.width = `${el.dataset.w}%`; el.style.display = "block"; }); }
+const cite = (c) => `${link(c.url, c.title)}${c.section ? ` <span class="muted">· ${esc(c.section)}</span>` : ""}${c.page ? ` <span class="muted">p. ${esc(c.page)}</span>` : ""}
+  ${c.official ? badge("ufficiale", "gold") : badge("community")} <span class="muted">acquisita ${fmtDate(c.acquired_at)}</span>${c.stale ? " " + badge("da riverificare", "warn") : ""}`;
 const link = (url, text) => (url && /^https?:\/\//.test(url) ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text || url)}</a>` : esc(text || url || "—"));
 function openModal(html) { $("#modal-body").innerHTML = html; $("#modal").showModal(); }
 function formData(form) {
@@ -145,19 +147,23 @@ function renderTestResult(r) {
       ${d.validation_errors.length ? `<div class="notice bad">${d.validation_errors.map(esc).join("<br>")}</div>` : ""}
       ${d.notes && d.notes.length ? `<p class="muted">${d.notes.map(esc).join("<br>")}</p>` : ""}
       <details><summary>Motivi della decisione</summary><ul>${r.decision_if_connected.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>
-      <details><summary>Fonti recuperate (${r.sources.length})</summary>${r.sources.length ? `<ul>${r.sources.map((s) => `<li>${link(s.url, s.title)} <span class="muted">${esc(s.heading || "")}</span></li>`).join("")}</ul>` : empty("Nessuna fonte nella knowledge base per questa domanda")}</details>`;
+      <details><summary>Fonti recuperate (${r.sources.length})</summary>${r.sources.length ? `<ul>${r.sources.map((s) => `<li>${cite(s)}</li>`).join("")}</ul>` : empty("Nessuna fonte nella knowledge base per questa domanda")}</details>
+      ${d.cta ? `<p class="muted">Invito aggiunto: ${esc(d.cta === "url" ? "link configurato" : "richiesta di consenso a essere ricontattati")}</p>` : ""}`;
   } else h += `<p>Nessuna bozza: ${esc(r.pre_decision.reasons.join("; "))}</p>`;
   return h + "</div>";
 }
 
 R.kb = async () => {
-  const [docs, updates, conflicts, sources] = await Promise.all([api("GET", "/api/kb/documents"), api("GET", "/api/kb/updates"),
-    api("GET", "/api/kb/conflicts"), api("GET", "/api/sources")]);
+  const [docs, updates, conflicts, sources, stale] = await Promise.all([api("GET", "/api/kb/documents"), api("GET", "/api/kb/updates"),
+    api("GET", "/api/kb/conflicts"), api("GET", "/api/sources"), api("GET", "/api/kb/stale?days=30")]);
   return [
     panel("Ricerca nella knowledge base", `<form id="kb-search" class="row"><input name="q" placeholder="Es.: area di lavoro, rotativo, ardesia" required minlength="2" aria-label="Cerca"><button class="btn primary">Cerca</button></form><div id="kb-results"></div>`),
     `<div class="grid">${panel("Novità rilevate", table([["Quando", (r) => fmtDate(r.detected_at)], ["Tipo", (r) => badge(r.kind, r.kind === "gone" ? "bad" : "info")], ["Dettaglio", (r) => esc(r.summary), "wrap"],
       ["", (r) => (r.acknowledged ? '<span class="muted">letto</span>' : `<button class="btn small" data-act="kb-ack" data-id="${r.id}">Segna letto</button>`)]], updates.slice(0, 30), "Nessuna novità: avvia un crawling o importa un documento"))}
     ${panel("Dati in conflitto", table([["Prodotto", (r) => esc(r.product)], ["Specifica", (r) => esc(r.spec)], ["Valori", (r) => esc(r.values.join(" | ")), "wrap"]], conflicts, "Nessun conflitto tra fonti"))}</div>`,
+    can("kb.crawl") ? panel("Acquisisci un URL pubblico", `<form id="kb-url" class="row"><input name="url" type="url" required placeholder="https://support.xtool.com/..." aria-label="URL"><button class="btn primary">Acquisisci</button></form>
+      <p class="muted">Solo pagine dei domini registrati in Fonti, nel rispetto di robots.txt. Indirizzi interni o privati vengono rifiutati.</p>`) : "",
+    panel("Fonti da riverificare", table([["Documento", (r) => link(r.url, r.title || r.url), "wrap"], ["Fonte", (r) => esc(r.source)], ["Ultimo controllo", (r) => fmtDate(r.last_checked_at)]], stale, "Tutti i documenti attivi sono stati ricontrollati negli ultimi 30 giorni")),
     can("kb.crawl") ? panel("Importa documento (PDF o HTML)", `<form id="kb-import" class="form-grid">
       <div><label for="imp-src">Fonte</label><select id="imp-src" name="source_id">${sources.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select></div>
       <div><label for="imp-url">URL ufficiale di origine (facoltativo)</label><input id="imp-url" name="url" type="url" placeholder="https://support.xtool.com/..."></div>
@@ -166,7 +172,7 @@ R.kb = async () => {
       <p class="muted">Usa manuali e guide scaricati dalle fonti ufficiali. Ogni import crea una nuova versione se il contenuto cambia.</p>`, `<a class="btn small" href="/api/kb/export" target="_blank">Esporta catalogo (JSON)</a>`) : "",
     panel("Documenti", table([["Titolo", (r) => link(r.url, r.title || r.url), "wrap"], ["Fonte", (r) => esc(r.source)], ["Stato", (r) => badge(r.status)],
       ["Lingua", (r) => esc(r.language || "—")], ["Versioni", (r) => esc(r.versions || 1)], ["Ultima verifica", (r) => fmtDate(r.last_checked_at)],
-      ["", (r) => `<button class="btn small" data-act="doc-view" data-id="${r.id}">Dettagli</button>`]], docs,
+      ["", (r) => `<div class="actions"><button class="btn small" data-act="doc-view" data-id="${r.id}">Dettagli</button>${can("kb.edit") && r.status !== "removed" ? `<button class="btn small danger" data-act="doc-remove" data-id="${r.id}">Rimuovi</button>` : ""}</div>`]], docs,
       "La knowledge base è vuota. Importa un documento ufficiale o abilita il crawling di una fonte in <a href='#sources'>Fonti e Crawler</a>.")),
   ].join("");
 };
@@ -252,11 +258,12 @@ async function itemsView(filter) {
     ["Contenuto", (r) => `<p class="quote">${esc(r.text.slice(0, 400))}</p>`, "wrap"], ["Autore", (r) => esc(r.author_name || "—")],
     ["Prodotto", (r) => esc(r.products.join(", ") || "—")], ["Categoria", (r) => badge(r.category || "—", "gold")], ["Intento", (r) => esc(r.intent || "—")],
     ["Priorità", (r) => badge(r.priority || "—")], ["Risposta candidata", (r) => (r.draft_text ? `<p class="quote">${esc(r.draft_text.slice(0, 300))}</p>` : '<span class="muted">—</span>'), "wrap"],
-    ["Fonti", (r) => (r.citations.length ? r.citations.map((c) => link(c.url, c.title)).join("<br>") : '<span class="muted">nessuna</span>'), "wrap"],
+    ["Fonti", (r) => (r.citations.length ? r.citations.map(cite).join("<br>") : '<span class="muted">nessuna</span>'), "wrap"],
     ["Stato", (r) => badge(r.status)], ["Azione consigliata", (r) => esc(r.decision_reason || r.decision || "—"), "wrap"],
     ["", (r) => `<div class="actions">${r.permalink ? link(r.permalink, "Apri originale") : ""}
       ${can("drafts.edit") ? `<button class="btn small" data-act="item-process" data-id="${r.id}">Genera risposta</button>
       <button class="btn small" data-act="item-handled" data-id="${r.id}">Segna gestito</button>` : ""}
+      ${can("leads.edit") ? `<button class="btn small" data-act="item-lead" data-id="${r.id}">Crea opportunità</button>` : ""}
       ${r.draft_id ? `<a class="btn small" href="#queue">Vai alla bozza</a>` : ""}</div>`]],
     rows, "Nessun contenuto raccolto. Collega una Pagina o usa l'import manuale qui sopra.");
 }
@@ -320,12 +327,13 @@ R.queue = async () => {
     ${d.validation_errors.length ? `<div class="notice bad">${d.validation_errors.map(esc).join("<br>")}</div>` : ""}
     ${d.risk_flags.length ? `<div class="meta">Rischi: ${d.risk_flags.map((f) => badge(f, "bad")).join(" ")}</div>` : ""}
     <details><summary>Motivazione e fonti</summary><ul>${d.decision_reason.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-      ${d.citations.length ? d.citations.map((c) => link(c.url, c.title)).join("<br>") : '<span class="muted">nessuna fonte citata</span>'}</details>
+      ${d.citations.length ? d.citations.map(cite).join("<br>") : '<span class="muted">nessuna fonte citata</span>'}</details>
     <div class="row">
       ${d.status === "pending" && can("drafts.edit") ? `<button class="btn small" data-act="draft-save" data-id="${d.id}">Salva modifica</button>` : ""}
       ${d.status === "pending" && can("drafts.approve") ? `<button class="btn small primary" data-act="draft-approve" data-id="${d.id}">Approva</button><button class="btn small danger" data-act="draft-reject" data-id="${d.id}">Rifiuta</button>` : ""}
       ${d.status === "approved" && can("drafts.publish") && d.can_publish_via_api ? `<button class="btn small gold" data-act="draft-publish" data-id="${d.id}">Pubblica</button>` : ""}
       ${d.status === "approved" && !d.can_publish_via_api ? `<span class="muted">Canale senza pubblicazione via API: copia e pubblica a mano, poi segna come gestito.</span>` : ""}
+      ${d.cta ? badge(d.cta === "url" ? "invito con link" : "chiede consenso al contatto", "info") : ""}
       <button class="btn small" data-act="draft-copy" data-id="${d.id}">Copia</button>
       ${["pending", "approved"].includes(d.status) && can("drafts.edit") ? `<button class="btn small" data-act="item-handled" data-id="${d.social_item_id}">Segna gestito</button>` : ""}
     </div></article>`).join("");
@@ -395,9 +403,13 @@ R.eval = async () => {
 };
 
 R.automation = async () => {
-  const a = await api("GET", "/api/automation/rules");
+  const [a, as] = await Promise.all([api("GET", "/api/automation/rules"), api("GET", "/api/automation/auto-safe")]);
   const editable = can("automation.edit");
   return [
+    panel("AUTO_SAFE", `<p>${as.enabled ? badge("abilitato", "good") : badge("bloccato", "warn")} La pubblicazione automatica resta bloccata finché una valutazione recente, eseguita con il provider AI attivo, non supera le soglie.</p>
+      ${as.problems.length ? `<ul>${as.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : "<p>Requisiti soddisfatti.</p>"}
+      <p class="muted">Soglie: decisioni ≥ ${esc(as.requirements.decision_accuracy)}, categorie ≥ ${esc(as.requirements.category_accuracy)}, risposte non supportate ≤ ${esc(as.requirements.unsupported_rate)}, almeno ${esc(as.requirements.min_cases)} casi, valutazione di non più di ${esc(as.requirements.max_age_days)} giorni.</p>`,
+      editable ? (as.enabled ? `<button class="btn danger" data-act="autosafe" data-on="0">Blocca AUTO_SAFE</button>` : `<button class="btn gold" data-act="autosafe" data-on="1" ${as.ready ? "" : "disabled"}>Sblocca AUTO_SAFE</button>`) : ""),
     panel("Kill switch", `<div class="row"><label class="check"><input type="checkbox" data-act="kill" ${a.kill_switch ? "checked" : ""} ${editable ? "" : "disabled"}> <b>Blocca tutte le azioni automatiche</b></label>
       ${Object.keys(a.channel_kill || {}).map((ch) => `<label class="check"><input type="checkbox" data-act="kill-ch" data-ch="${esc(ch)}" ${a.channel_kill[ch] ? "checked" : ""} ${editable ? "" : "disabled"}> blocca ${esc(ch)}</label>`).join("")}</div>
       <p class="muted">Attivare il kill switch interrompe subito ogni pubblicazione automatica: è il rollback operativo.</p>`),
@@ -532,6 +544,9 @@ document.addEventListener("click", async (ev) => {
     case "lead-export": { const d = await act(() => api("GET", `/api/leads/${id}/export`)); if (d) openModal(`<button class="btn small ghost" data-act="modal-close">Chiudi</button><pre class="json">${esc(JSON.stringify(d, null, 2))}</pre>`); break; }
     case "lead-delete": if (b.dataset.confirm === "1") { const r = await act(() => api("DELETE", `/api/leads/${id}`), "Lead cancellato"); if (r) { $("#modal").close(); render(); } } else { b.dataset.confirm = "1"; b.textContent = "Conferma cancellazione definitiva"; } break;
     case "eval-run": { const r = await run(() => api("POST", "/api/eval/run"), "Valutazione completata", false); if (r) { $("#eval-out").innerHTML = panel("Risultato", `<pre class="json">${esc(JSON.stringify(r.summary, null, 2))}</pre>` + table([["Caso", (x) => esc(x.key)], ["Categoria", (x) => `${badge(x.category, x.category_ok ? "good" : "bad")}`], ["Decisione", (x) => badge(x.decision, x.decision_ok ? "good" : "bad")], ["Termini vietati", (x) => esc(x.forbidden_found.join(", "))], ["Bozza", (x) => esc(x.draft.slice(0, 200)), "wrap"]], r.results)); } break; }
+    case "doc-remove": if (b.dataset.confirm === "1") await run(() => api("DELETE", `/api/kb/documents/${id}`, { reason: "rimosso dalla dashboard" }), "Documento rimosso"); else { b.dataset.confirm = "1"; b.textContent = "Conferma rimozione"; } break;
+    case "item-lead": { const r = await run(() => api("POST", `/api/social/items/${id}/lead`), null, false); if (r) toast(r.lead_id ? "Opportunità creata nel CRM (nessun dato di contatto)" : "Nessuna opportunità creata"); break; }
+    case "autosafe": await run(() => api("POST", "/api/automation/auto-safe", { enabled: b.dataset.on === "1" }), b.dataset.on === "1" ? "AUTO_SAFE sbloccato" : "AUTO_SAFE bloccato"); break;
     case "job-requeue": await run(() => api("POST", `/api/jobs/${id}/requeue`), "Job riaccodato"); break;
     case "settings-save": {
       const errs = [];
@@ -576,7 +591,8 @@ document.addEventListener("submit", async (ev) => {
     case "login-form": return doLogin();
     case "agent-test": { const out = $("#agent-test-out"); out.innerHTML = '<p class="muted">Analisi in corso…</p>'; const r = await act(() => api("POST", "/api/agent/test", { text: d.text })); out.innerHTML = r ? renderTestResult(r) : ""; return; }
     case "prompt-new": return act(() => api("POST", "/api/prompts", { name: "responder", text: d.text })).then(done("Nuova versione salvata (non ancora attiva)"));
-    case "kb-search": { const r = await act(() => api("GET", `/api/kb/search?q=${encodeURIComponent(d.q)}`)); if (r) $("#kb-results").innerHTML = `<p class="muted">Copertura fonti: ${esc(r.evidence)}</p>` + table([["Fonte", (h) => link(h.url, h.title), "wrap"], ["Sezione", (h) => esc(h.heading || "")], ["Estratto", (h) => esc(h.text), "wrap"], ["Tipo", (h) => badge(h.kind, h.kind.startsWith("official") ? "gold" : "")], ["Verificato", (h) => fmtDate(h.checked_at)]], r.hits, "Nessun risultato: la knowledge base non contiene ancora informazioni su questo tema"); return; }
+    case "kb-search": { const r = await act(() => api("GET", `/api/kb/search?q=${encodeURIComponent(d.q)}`)); if (r) $("#kb-results").innerHTML = `<p class="muted">Copertura fonti: ${esc(r.evidence)}</p>` + table([["Fonte", (h) => cite(h), "wrap"], ["Estratto", (h) => esc(h.text), "wrap"], ["Verificato", (h) => fmtDate(h.checked_at)]], r.hits, "Nessun risultato: la knowledge base non contiene ancora informazioni su questo tema"); return; }
+    case "kb-url": { const r = await act(() => api("POST", "/api/kb/ingest-url", { url: d.url })); if (r) { toast(`Esito: ${r.outcome}${r.detail ? " — " + r.detail : ""}`, !r.document_id); render(); } return; }
     case "kb-import": { const fd = new FormData(f); if (!fd.get("url")) fd.delete("url"); return act(() => api("POST", "/api/kb/import", fd, true)).then((r) => r && (toast(`Import: ${r.outcome}`), render())); }
     case "product-form": return act(() => api("POST", "/api/products", d)).then(done("Prodotto salvato"));
     case "spec-form": return act(() => api("POST", `/api/products/${encodeURIComponent(f.dataset.key)}/specs`, d)).then((r) => r && (toast("Specifica aggiunta"), $("#modal").close(), render()));
