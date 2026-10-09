@@ -39,11 +39,10 @@ def test_manual_import_dedup_and_processing(seeded_kb):
     assert len(ids) == 2
     assert seeded_kb.pipeline.ingest(src, ManualConnector.parse(src["id"], raw)) == []   # deduplica
     res = [seeded_kb.pipeline.process(i) for i in ids]
-    assert all(r["action"] == "review" for r in res)          # default APPROVAL
-    assert all(r["lead_id"] for r in res)
-    # 12. senza connettore autorizzato non si pubblica
-    reasons = " ".join(res[0]["reasons"])
-    assert "non consente la pubblicazione" in reasons or "non autenticato" in reasons
+    assert all(r["action"] == "draft" for r in res)           # modalità iniziale DRAFT
+    # solo l'interesse concreto ("vorrei comprare… preventivo") crea un'opportunità; la domanda tecnica no
+    assert res[0]["lead_id"] is None and res[1]["lead_id"]
+    assert "DRAFT" in " ".join(res[0]["reasons"])
 
 
 # 15. idempotenza dell'elaborazione
@@ -64,7 +63,7 @@ def test_manual_channel_cannot_publish(seeded_kb):
     seeded_kb.pipeline.approve(r["draft_id"], user_id=None)
     with pytest.raises(NotSupported):
         seeded_kb.pipeline.publish(r["draft_id"], actor="user:1")
-    with pytest.raises(PermissionError):   # la policy non ha autorizzato l'auto-pubblicazione
+    with pytest.raises(NotSupported):
         seeded_kb.pipeline.publish(r["draft_id"], actor="system:auto")
 
 
@@ -79,6 +78,7 @@ def test_auto_safe_publishes_once_with_idempotency(settings, fake_ai):
     svc.catalog.upsert_product({"key": "test-laser-a", "official_name": "Test Laser A"})
     import_file(svc.db, official_source_id(svc), "a.html", (FIXTURES / "product_a.html").read_bytes(), "https://support.example.test/a")
     svc.policy.set_rule("technical", "*", "AUTO_SAFE", min_confidence=0.8, min_evidence=0.3)
+    svc.store.set("automation.auto_safe_enabled", True, _internal=True)
     _, src = connect_facebook(svc)
     out = svc.pipeline.poll_source(src["id"])
     assert out["new"] == 2   # post + commento

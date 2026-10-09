@@ -82,6 +82,8 @@ def test_prompt_injection_detected_and_isolated(seeded_kb, fake_ai):
     seeded_kb.engine.generate(text, cls, [], "it")
     user_msg = [c for c in fake_ai.calls if c["purpose"] == "respond"][-1]["user"]
     assert user_msg.count("</contenuto_esterno>") == 1   # solo il delimitatore legittimo
+    seeded_kb.policy.set_rule("technical", "*", "AUTO_SAFE")
+    seeded_kb.store.set("automation.auto_safe_enabled", True, _internal=True)
     decision = seeded_kb.policy.decide(category="technical", channel="facebook", risk_flags=cls.risk_flags, confidence=0.99,
                                        evidence=0.99, validation_errors=[], needs_clarification=False,
                                        connector_can_publish=True, connector_authenticated=True, already_published=False)

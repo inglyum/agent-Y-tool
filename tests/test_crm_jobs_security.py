@@ -151,7 +151,7 @@ def test_api_end_to_end_manual_flow(client, svc):
     ov = client.get("/api/overview").json()
     assert ov["crm_30d"]["leads"] == 1 and ov["social_30d"]["approved"] == 1
     t = client.post("/api/agent/test", headers=h, json={"text": "Quanto costa?"}).json()
-    assert t["classification"]["category"] == "price" and t["decision_if_connected"]["action"] == "review"
+    assert t["classification"]["category"] == "price" and t["decision_if_connected"]["action"] == "draft"
     assert client.post("/api/eval/run", headers=h).json()["summary"]["cases"] >= 10
     # impostazioni: URL non https rifiutato, nessun link inventato
     assert client.put("/api/settings", headers=h, json={"key": "cta.demo_url", "value": "http://x"}).status_code == 400
@@ -162,3 +162,24 @@ def test_webhook_endpoint_rejects_unsigned(client):
     assert client.post("/webhooks/meta", content=b"{}").status_code == 403
     assert client.get("/webhooks/meta", params={"hub.mode": "subscribe", "hub.verify_token": "verify-me",
                                                 "hub.challenge": "42"}).text == "42"
+
+
+def test_community_participation_is_not_a_marketing_contact(client, svc):
+    h = login(client)
+    src = svc.db.one("SELECT * FROM social_sources WHERE platform='manual'")
+    [iid] = svc.pipeline.ingest(src, ManualConnector.parse(src["id"], "Carla: Il mio laser non taglia più bene, consigli?"))
+    assert svc.pipeline.process(iid)["lead_id"] is None
+    r = client.post(f"/api/social/items/{iid}/lead", headers=h).json()
+    lead = svc.crm.get(r["lead_id"])
+    assert lead["contact_email"] is None and lead["consents"] == []
+    assert "Convertito a mano" in lead["events"][0]["detail"]
+    assert not svc.crm.can_contact(r["lead_id"]) and not svc.crm.can_contact(r["lead_id"], "marketing")
+
+
+def test_workspace_seeded_and_users_bound(svc):
+    from ingly.security import create_user
+    ws = svc.db.one("SELECT id, name FROM workspaces")
+    assert ws["name"] == "INGLY DESIGN"
+    uid = create_user(svc.db, "Nuovo@Example.Test", "password-lunga-123", "viewer")
+    u = svc.db.one("SELECT email, workspace_id FROM users WHERE id=?", (uid,))
+    assert u == {"email": "nuovo@example.test", "workspace_id": ws["id"]}

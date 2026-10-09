@@ -108,6 +108,14 @@ class MaterialIn(BaseModel):
     verified_at: str | None = None
 
 
+class UrlIn(BaseModel):
+    url: str = Field(min_length=10, max_length=2000)
+
+
+class RemoveIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class SourcePatch(BaseModel):
     crawl_enabled: bool | None = None
     crawl_interval_hours: int | None = Field(default=None, ge=1, le=24 * 30)
@@ -173,6 +181,10 @@ class RuleIn(BaseModel):
     max_per_hour: int | None = Field(default=None, ge=0, le=1000)
     max_per_day: int | None = Field(default=None, ge=0, le=10000)
     include_cta: bool | None = None
+
+
+class AutoSafeIn(BaseModel):
+    enabled: bool
 
 
 class KillIn(BaseModel):
@@ -395,6 +407,26 @@ def create_app(svc: Services | None = None) -> FastAPI:
             bad(e)
         audit(db, f"user:{user['id']}", "kb.import", "document", res["document_id"], {"file": file.filename}, user["id"])
         return res
+
+    @app.post("/api/kb/ingest-url")
+    def kb_ingest_url(body: UrlIn, user: dict = Depends(need("kb.crawl"))):
+        from ..knowledge.netguard import BlockedURL
+        try:
+            res = svc.crawler().fetch_url(body.url.strip())
+        except BlockedURL as e:
+            raise HTTPException(400, f"URL non acquisibile: {e}")
+        audit(db, f"user:{user['id']}", "kb.ingest_url", "document", res.get("document_id"), {"url": body.url, **res}, user["id"])
+        return res
+
+    @app.delete("/api/kb/documents/{doc_id}")
+    def kb_remove(doc_id: int, body: RemoveIn, user: dict = Depends(need("kb.edit"))):
+        if not svc.kb.remove(doc_id, body.reason, user["id"]):
+            raise HTTPException(404, "Documento inesistente o già rimosso")
+        return {"ok": True}
+
+    @app.get("/api/kb/stale")
+    def kb_stale(days: int = Query(30, ge=1, le=3650), user: dict = Depends(need("dashboard.view"))):
+        return svc.kb.stale(days)
 
     @app.get("/api/kb/updates")
     def kb_updates(user: dict = Depends(need("dashboard.view"))):
@@ -664,6 +696,17 @@ def create_app(svc: Services | None = None) -> FastAPI:
         except Exception as e:  # noqa: BLE001
             raise HTTPException(500, f"Elaborazione fallita: {e}")
 
+    @app.post("/api/social/items/{iid}/lead")
+    def item_to_lead(iid: int, user: dict = Depends(need("leads.edit"))):
+        from ..response.classify import classify_rules
+        item = db.one("SELECT * FROM social_items WHERE id=?", (iid,))
+        if not item:
+            raise HTTPException(404)
+        cls = classify_rules(item["text"])
+        lid = svc.crm.create_from_item(item, cls, jload(item["products"], []) or [], jload(item["materials"], []) or [],
+                                       manual=True, user_id=user["id"])
+        return {"lead_id": lid}
+
     @app.post("/api/social/items/{iid}/handled")
     def handled(iid: int, body: RejectIn, user: dict = Depends(need("drafts.edit"))):
         svc.pipeline.mark_handled(iid, user["id"], body.reason)
@@ -842,6 +885,26 @@ def create_app(svc: Services | None = None) -> FastAPI:
         except ValueError as e:
             bad(e)
         return {"ok": True}
+
+    def _auto_safe_status() -> dict:
+        last = db.one("SELECT * FROM evaluation_runs ORDER BY id DESC LIMIT 1")
+        ok, problems = svc.policy.auto_safe_readiness(last, svc.ai.label, svc.ai.available)
+        from ..automation.policy import AUTO_SAFE_REQUIREMENTS
+        return {"enabled": bool(svc.store.get("automation.auto_safe_enabled")), "ready": ok, "problems": problems,
+                "requirements": AUTO_SAFE_REQUIREMENTS, "last_evaluation": jload(last["summary"], {}) if last else None}
+
+    @app.get("/api/automation/auto-safe")
+    def auto_safe_status(user: dict = Depends(need("dashboard.view"))):
+        return _auto_safe_status()
+
+    @app.post("/api/automation/auto-safe")
+    def auto_safe_set(body: AutoSafeIn, user: dict = Depends(need("automation.edit"))):
+        st = _auto_safe_status()
+        if body.enabled and not st["ready"]:
+            raise HTTPException(400, "AUTO_SAFE non sbloccabile: " + "; ".join(st["problems"]))
+        svc.store.set("automation.auto_safe_enabled", body.enabled, user["id"], _internal=True)
+        audit(db, f"user:{user['id']}", "automation.auto_safe", None, None, {"enabled": body.enabled}, user["id"])
+        return _auto_safe_status()
 
     @app.post("/api/automation/kill")
     def kill(body: KillIn, user: dict = Depends(need("automation.edit"))):

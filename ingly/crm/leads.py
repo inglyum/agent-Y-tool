@@ -18,6 +18,9 @@ ALLOWED_TRANSITIONS = {
     "WON": set(),
     "LOST": {"NEW", "QUALIFIED"},
 }
+# Solo un interesse concreto espresso nel messaggio crea automaticamente un'opportunità.
+# Domande di supporto o semplice partecipazione: nessun lead automatico (conversione manuale possibile).
+AUTO_LEAD_INTENTS = {"purchase", "quote", "demo", "course"}
 LEAD_CATEGORIES = ["curious", "machine", "accessory", "materials", "support", "course", "demo", "quote", "b2b"]
 
 # Pesi configurabili in un solo punto; ogni punto assegnato è spiegato nel lead.
@@ -52,9 +55,13 @@ class CRM:
         self.db = db
         self.retention_days = retention_days
 
-    def create_from_item(self, item: dict, cls: Classification, products: list[str], materials: list[str]) -> int | None:
-        if not cls.lead_category:
+    def create_from_item(self, item: dict, cls: Classification, products: list[str], materials: list[str],
+                         manual: bool = False, user_id: int | None = None) -> int | None:
+        """Crea un'opportunità (non un contatto marketing): nessun recapito, nessuna iscrizione a campagne."""
+        if not manual and (not cls.lead_category or cls.intent not in AUTO_LEAD_INTENTS):
             return None
+        if manual and not cls.lead_category:
+            cls.lead_category = "curious"
         score, expl = score_lead(cls, products, materials)
         now = now_iso()
         with self.db.tx() as c:
@@ -67,8 +74,9 @@ class CRM:
                             (item.get("author_name"), item["platform"], item.get("author_ref"), item["id"], cls.lead_category,
                              ", ".join(products) or None, jdump(materials), score, jdump(expl),
                              now_iso(timedelta(days=self.retention_days)), now, now)).lastrowid
-            c.execute("INSERT INTO lead_events (lead_id,kind,detail,at) VALUES (?,?,?,?)",
-                      (lid, "created", f"Da {item['platform']}: {cls.category}/{cls.intent}", now))
+            c.execute("INSERT INTO lead_events (lead_id,kind,detail,user_id,at) VALUES (?,?,?,?,?)",
+                      (lid, "created", f"{'Convertito a mano' if manual else 'Interesse espresso'} da {item['platform']}: "
+                                       f"{cls.category}/{cls.intent}", user_id, now))
             c.execute("INSERT INTO conversations (social_item_id,lead_id,channel,summary,created_at) VALUES (?,?,?,?,?)",
                       (item["id"], lid, item["platform"], item["text"][:280], now))
             audit(c, "system", "crm.lead.create", "lead", lid, {"category": cls.lead_category, "score": score})

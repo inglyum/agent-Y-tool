@@ -21,10 +21,11 @@ RESPONSE_SCHEMA = {
         "used_sources": {"type": "array", "items": {"type": "string"}},
         "confidence": {"type": "number"},
         "needs_clarification": {"type": "boolean"},
+        "hypotheses": {"type": "array", "items": {"type": "string"}},
         "unsupported_claims": {"type": "array", "items": {"type": "string"}},
         "language": {"type": "string", "enum": ["it", "en"]},
     },
-    "required": ["answer", "used_sources", "confidence", "needs_clarification", "unsupported_claims", "language"],
+    "required": ["answer", "used_sources", "confidence", "needs_clarification", "hypotheses", "unsupported_claims", "language"],
     "additionalProperties": False,
 }
 
@@ -50,6 +51,7 @@ SPEC_NUMBER = re.compile(r"\b(\d+(?:[.,]\d+)?)\s?(w|watt|mm|cm|nm|mm/s|kg|v|°c|
 URL = re.compile(r"https?://[^\s)\]>]+", re.I)
 RISKY_ADVICE = re.compile(r"(disattiv\w*|rimuov\w*|bypass\w*|disable|remove)\s+(il |la |lo |the )?(sensore|sensor|interlock|coperchio|lid|protezion\w*|safety)"
                           r"|senza (occhiali|protezion)|without (goggles|glasses)", re.I)
+PROMPT_LEAK = re.compile(r"contenuto_esterno|FORMATO TECNICO|POLICY DI ESECUZIONE|System Prompt v\d|unsupported_claims|used_sources", re.I)
 ABSOLUTE = re.compile(r"\b(sicuramente compatibile|garantit[oa] al 100|100% compatibile|definitely compatible|guaranteed)\b", re.I)
 
 FALLBACK_REPLIES = {
@@ -92,6 +94,8 @@ class Draft:
     validation_errors: list[str] = field(default_factory=list)
     generated_by: str = "template"
     notes: list[str] = field(default_factory=list)       # informazioni operative, non errori
+    hypotheses: list[str] = field(default_factory=list)  # affermazioni presentate come ipotesi/esperienza generale
+    cta: str | None = None                               # invito aggiunto dal sistema (url o richiesta di consenso)
 
 
 def escape_external(text: str) -> str:
@@ -107,10 +111,22 @@ def load_prompt(db: Database, name: str = "responder") -> tuple[str, int]:
 
 
 def seed_prompts(db: Database) -> None:
+    """Registra le versioni dei prompt presenti su disco. La più recente diventa attiva solo se l'attuale
+    versione attiva non è stata creata da un utente (le personalizzazioni non vengono mai sovrascritte)."""
+    files: dict[str, list[tuple[int, str]]] = {}
     for f in sorted(PROMPTS_DIR.glob("*_v*.md")):
         name, ver = f.stem.rsplit("_v", 1)
-        db.run("INSERT OR IGNORE INTO prompt_versions (name,version,text,active,created_at) VALUES (?,?,?,?,?)",
-               (name, int(ver), f.read_text(), 1, now_iso()))
+        files.setdefault(name, []).append((int(ver), f.read_text()))
+        db.run("INSERT OR IGNORE INTO prompt_versions (name,version,text,active,created_at) VALUES (?,?,?,0,?)",
+               (name, int(ver), f.read_text(), now_iso()))
+    for name, versions in files.items():
+        latest = max(v for v, _ in versions)
+        active = db.one("SELECT version, created_by FROM prompt_versions WHERE name=? AND active=1", (name,))
+        if active and active["created_by"] is not None:
+            continue
+        with db.tx() as c:
+            c.execute("UPDATE prompt_versions SET active=0 WHERE name=?", (name,))
+            c.execute("UPDATE prompt_versions SET active=1 WHERE name=? AND version=?", (name, latest))
 
 
 def sources_block(hits: list[Hit]) -> str:
@@ -120,6 +136,10 @@ def sources_block(hits: list[Hit]) -> str:
         parts.append(f"<fonte id=\"S{i}\" tipo=\"{kind}\" url=\"{h.url}\" verificata=\"{h.last_checked_at}\">\n"
                      f"{h.title}{' — ' + h.heading if h.heading else ''}\n{escape_external(h.text)}\n</fonte>")
     return "\n".join(parts) or "(nessuna fonte disponibile)"
+
+
+def conflicts_block(conflicts: list[dict]) -> str:
+    return "\n".join(f"- {c['product']} / {c['spec']}: valori {', '.join(c['values'])}" for c in conflicts) or "(nessuno)"
 
 
 def validate_reply(text: str, hits: list[Hit], settings: SettingsStore, cta_urls: list[str] | None = None) -> list[str]:
@@ -149,6 +169,8 @@ def validate_reply(text: str, hits: list[Hit], settings: SettingsStore, cta_urls
         errors.append("Contiene indicazioni contrarie alle norme di sicurezza")
     if ABSOLUTE.search(text):
         errors.append("Contiene garanzie assolute non verificabili")
+    if PROMPT_LEAK.search(text):
+        errors.append("Possibile divulgazione di istruzioni interne")
     return errors
 
 
@@ -175,11 +197,12 @@ class ResponseEngine:
         lang = language if language in ("it", "en") else "it"
         hits = self.retriever.search(text, products=products)
         evidence = Retriever.evidence_score(text, hits)
+        conflicts = self.retriever.conflicts(products) if products else []
         if self.ai.available:
             system, _ver = load_prompt(self.db)
             user = (f"CATEGORIA STIMATA: {cls.category} / INTENTO: {cls.intent}\n\n"
                     f"<contenuto_esterno>\n{escape_external(text)}\n</contenuto_esterno>\n\n"
-                    f"<fonti>\n{sources_block(hits)}\n</fonti>")
+                    f"<fonti>\n{sources_block(hits)}\n</fonti>\n\n<conflitti>\n{conflicts_block(conflicts)}\n</conflitti>")
             try:
                 res = self.ai.complete_json(system, user, RESPONSE_SCHEMA, "respond")
                 d = res.data
@@ -188,12 +211,18 @@ class ResponseEngine:
                 answer = re.sub(r"\s*\[S\d+\]", "", d["answer"]).strip()  # i riferimenti restano nei metadati
                 draft = Draft(answer, d.get("language", lang), cites, max(0.0, min(1.0, float(d["confidence"]))),
                               evidence, bool(d["needs_clarification"]), list(d.get("unsupported_claims") or []),
-                              generated_by=self.ai.label)
+                              generated_by=self.ai.label, hypotheses=list(d.get("hypotheses") or []))
                 if not cites and not draft.needs_clarification:
                     draft.validation_errors.append("Nessuna fonte citata a supporto della risposta")
                 draft.validation_errors += validate_reply(draft.text, hits, self.settings)
                 if draft.unsupported_claims:
                     draft.validation_errors.append("Il modello segnala affermazioni senza fonte")
+                if conflicts:
+                    draft.validation_errors.append("Fonti in conflitto su: " + ", ".join(f"{c['product']}/{c['spec']}" for c in conflicts))
+                if draft.hypotheses:
+                    draft.notes.append("Contiene ipotesi o esperienza generale: " + "; ".join(draft.hypotheses))
+                if any(c.get("stale") for c in draft.citations):
+                    draft.notes.append("Alcune fonti citate non sono state ricontrollate di recente")
                 return draft, hits
             except (AIUnavailable, AIOutputInvalid, AIBudgetExceeded) as e:
                 fallback_note = f"AI non disponibile: {e}"
@@ -209,13 +238,22 @@ class ResponseEngine:
         return draft, hits
 
     def add_cta(self, draft: Draft, cls: Classification) -> str | None:
-        """Invito facoltativo solo se l'URL è configurato. Ritorna l'URL usato."""
+        """Invito facoltativo solo per interesse concreto (acquisto, preventivo, demo, corso).
+        Con un URL configurato lo indica; altrimenti chiede se la persona vuole essere ricontattata
+        (nessun dato raccolto senza consenso). Ritorna il tipo di invito aggiunto."""
+        if cls.intent not in ("purchase", "quote", "demo", "course"):
+            return None
         key = {"demo": "cta.demo_url", "course": "cta.course_url", "quote": "cta.quote_url"}.get(cls.intent, "cta.contact_url")
         url = self.settings.get(key) or self.settings.get("cta.contact_url")
-        if not url:
-            return None
         brand = self.settings.get("brand.name")
-        line = (f"\n\nSe ti va di approfondire sul tuo progetto, puoi contattare {brand}: {url}" if draft.language == "it"
-                else f"\n\nIf you'd like to go deeper on your project, you can reach {brand}: {url}")
+        it = draft.language != "en"
+        if url:
+            line = (f"\n\nSe ti va di approfondire sul tuo progetto, puoi contattare {brand}: {url}" if it
+                    else f"\n\nIf you'd like to go deeper on your project, you can reach {brand}: {url}")
+            draft.cta = "url"
+        else:
+            line = (f"\n\nSe ti fa piacere essere ricontattato da {brand} per approfondire, dimmelo pure qui." if it
+                    else f"\n\nIf you'd like {brand} to get back to you about it, just let me know here.")
+            draft.cta = "consent_question"
         draft.text += line
-        return url
+        return draft.cta

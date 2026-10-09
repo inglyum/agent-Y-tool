@@ -311,6 +311,7 @@ CREATE TABLE response_drafts (
   validation_errors TEXT,                -- JSON
   decision TEXT NOT NULL,                -- publish | review | ignore
   decision_reason TEXT,
+  cta TEXT,                              -- url | consent_question | NULL
   generated_by TEXT NOT NULL,            -- provider:model | template
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','published','failed','superseded')),
   edited_by BIGINT REFERENCES users(id),

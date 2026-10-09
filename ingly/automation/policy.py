@@ -11,9 +11,14 @@ from ..settings_store import SettingsStore
 MODES = ("OFF", "MONITOR", "DRAFT", "APPROVAL", "AUTO_SAFE")
 POLICY_CATEGORIES = ["technical", "compatibility", "price", "commercial", "demo_course", "problem", "complaint",
                      "misinformation", "sensitive", "spam", "other"]
-# Default prudenti: nessuna pubblicazione automatica finché l'utente non la abilita.
-DEFAULT_MODES = {c: "APPROVAL" for c in POLICY_CATEGORIES}
+# Modalità iniziale DRAFT: solo bozze. Spam e post senza domanda vengono solo classificati.
+DEFAULT_MODES = {c: "DRAFT" for c in POLICY_CATEGORIES}
 DEFAULT_MODES.update({"spam": "MONITOR", "other": "MONITOR"})
+# Errori di validazione che bloccano qualsiasi pubblicazione, anche approvata da una persona.
+BLOCKING_ERRORS = ("affiliazione", "sicurezza", "istruzioni interne", "Link non consentito")
+# Requisiti per sbloccare AUTO_SAFE
+AUTO_SAFE_REQUIREMENTS = {"max_age_days": 7, "decision_accuracy": 0.9, "category_accuracy": 0.85,
+                          "unsupported_rate": 0.05, "forbidden_term_violations": 0, "min_cases": 10}
 # Categorie per cui AUTO_SAFE non è mai ammesso, qualunque sia la configurazione.
 NEVER_AUTO = {"complaint", "sensitive", "misinformation", "spam", "price"}
 
@@ -87,6 +92,8 @@ class PolicyEngine:
         reasons: list[str] = []
         if mode == "APPROVAL":
             reasons.append("Modalità APPROVAL: serve approvazione umana")
+        if mode == "AUTO_SAFE" and not self.settings.get("automation.auto_safe_enabled"):
+            reasons.append("AUTO_SAFE non abilitato: serve una valutazione superata (Automazioni → Sblocca AUTO_SAFE)")
         if category in NEVER_AUTO:
             reasons.append(f"Categoria '{category}' sempre in revisione")
         if category in (self.settings.get("escalation.categories") or []):
@@ -126,3 +133,55 @@ class PolicyEngine:
         return (h >= int(rule["max_per_hour"]) or d >= int(rule["max_per_day"])
                 or gh >= int(self.settings.get("automation.global_max_per_hour"))
                 or gd >= int(self.settings.get("automation.global_max_per_day")))
+
+    # ---------- autorizzazione lato server di ogni pubblicazione ----------
+    def authorize_publish(self, *, category: str | None, channel: str, actor: str, draft_status: str,
+                          draft_decision: str, validation_errors: list[str]) -> None:
+        """Solleva PermissionError se la pubblicazione non è consentita. Chiamata per OGNI pubblicazione."""
+        if self.settings.kill_switch_active() or self.settings.kill_switch_active(channel):
+            raise PermissionError("Kill switch attivo: pubblicazione bloccata")
+        mode = self.rule(category or "other", channel)["mode"]
+        if mode in ("OFF", "MONITOR"):
+            raise PermissionError(f"Modalità {mode} per '{category}': nessuna azione esterna consentita")
+        if mode == "DRAFT":
+            raise PermissionError(f"Modalità DRAFT per '{category}': la bozza va pubblicata a mano sulla piattaforma")
+        blocking = [e for e in validation_errors if any(b in e for b in BLOCKING_ERRORS)]
+        if blocking:
+            raise PermissionError("Errori bloccanti: " + "; ".join(blocking))
+        if actor == "system:auto":
+            if mode != "AUTO_SAFE" or not self.settings.get("automation.auto_safe_enabled") or draft_decision != "publish":
+                raise PermissionError("Pubblicazione automatica non autorizzata dalla policy")
+        elif actor.startswith("user:"):
+            if draft_status != "approved":
+                raise PermissionError("Serve l'approvazione esplicita della bozza prima di pubblicare")
+        else:
+            raise PermissionError("Attore non riconosciuto")
+        if self.publish_quota_exceeded(channel, self.rule(category or "other", channel)):
+            raise PermissionError("Limite di pubblicazioni raggiunto per il canale")
+
+    def auto_safe_readiness(self, db_last_run: dict | None, ai_label: str, ai_available: bool) -> tuple[bool, list[str]]:
+        """Verifica i requisiti per sbloccare AUTO_SAFE: provider AI attivo e valutazione recente superata."""
+        from ..db import jload, parse_iso, utcnow
+        req = AUTO_SAFE_REQUIREMENTS
+        problems = []
+        if not ai_available:
+            problems.append("Nessun provider AI attivo")
+        if not db_last_run:
+            return False, problems + ["Nessuna valutazione eseguita"]
+        summ = jload(db_last_run["summary"], {})
+        started = parse_iso(db_last_run["started_at"])
+        if not started or (utcnow() - started).days > req["max_age_days"]:
+            problems.append(f"Ultima valutazione più vecchia di {req['max_age_days']} giorni")
+        if db_last_run["provider"] != ai_label:
+            problems.append("L'ultima valutazione è stata eseguita con un provider/modello diverso da quello attivo")
+        if summ.get("cases", 0) < req["min_cases"]:
+            problems.append(f"Servono almeno {req['min_cases']} casi di valutazione")
+        if summ.get("decision_accuracy", 0) < req["decision_accuracy"]:
+            problems.append(f"Accuratezza decisioni {summ.get('decision_accuracy')} < {req['decision_accuracy']}")
+        if summ.get("category_accuracy", 0) < req["category_accuracy"]:
+            problems.append(f"Accuratezza categorie {summ.get('category_accuracy')} < {req['category_accuracy']}")
+        if summ.get("unsupported_rate", 1) > req["unsupported_rate"]:
+            problems.append(f"Risposte non supportate {summ.get('unsupported_rate')} > {req['unsupported_rate']}")
+        if summ.get("forbidden_term_violations", 1) > req["forbidden_term_violations"]:
+            problems.append("Termini vietati presenti nelle risposte di prova")
+        return not problems, problems

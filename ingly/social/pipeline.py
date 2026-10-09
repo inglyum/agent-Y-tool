@@ -110,8 +110,9 @@ class Pipeline:
         can_publish = bool(caps and (caps.reply_comment if item["kind"] == "comment" else caps.reply_post))
         source = self.db.one("SELECT * FROM social_sources WHERE id=?", (item["source_id"],))
         authenticated = bool(conn and hasattr(conn, "authenticated") and conn.authenticated(source))
-        if pre.include_cta and cls.intent in ("purchase", "quote", "demo", "course", "research") \
-                and not draft.validation_errors and not self._cta_recent(item):
+        if self._duplicate_reply(draft.text):
+            draft.validation_errors.append("Risposta identica già pubblicata in un'altra discussione: personalizzala")
+        if pre.include_cta and not draft.validation_errors and not self._cta_recent(item):
             cta = self.engine.add_cta(draft, cls)
         decision = self.policy.decide(category=cls.category, channel=item["platform"], risk_flags=cls.risk_flags,
                                       confidence=draft.confidence, evidence=draft.evidence,
@@ -122,11 +123,11 @@ class Pipeline:
             c.execute("UPDATE response_drafts SET status='superseded', updated_at=? WHERE social_item_id=? AND status='pending'",
                       (now_iso(), item_id))
             draft_id = c.execute("""INSERT INTO response_drafts (social_item_id,text,language,citations,confidence,evidence_score,
-                                    risk_flags,validation_errors,decision,decision_reason,generated_by,status,created_at,updated_at)
-                                    VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)""",
+                                    risk_flags,validation_errors,decision,decision_reason,cta,generated_by,status,created_at,updated_at)
+                                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)""",
                                  (item_id, draft.text, draft.language, jdump(draft.citations), draft.confidence, draft.evidence,
                                   jdump(cls.risk_flags), jdump(draft.validation_errors), decision.action,
-                                  jdump(decision.reasons + draft.notes), draft.generated_by, now_iso(), now_iso())).lastrowid
+                                  jdump(decision.reasons + draft.notes), cta, draft.generated_by, now_iso(), now_iso())).lastrowid
             audit(c, "system", "pipeline.decision", "social_item", item_id,
                   {"draft": draft_id, "decision": decision.action, "reasons": decision.reasons, "cta": bool(cta)})
         if decision.action == "publish":
@@ -144,6 +145,17 @@ class Pipeline:
         return bool(self.db.one("SELECT 1 AS x FROM published_responses WHERE social_item_id=? AND status IN ('published','reserved')",
                                 (item_id,)))
 
+    @staticmethod
+    def _norm(text: str) -> str:
+        return re.sub(r"\W+", " ", text.lower()).strip()
+
+    def _duplicate_reply(self, text: str) -> bool:
+        """Evita di pubblicare la stessa risposta in discussioni diverse (ultimi 30 giorni)."""
+        since = now_iso(-timedelta(days=30))
+        target = self._norm(text)
+        rows = self.db.all("SELECT text FROM response_drafts WHERE status='published' AND updated_at>=?", (since,))
+        return any(self._norm(r["text"]) == target for r in rows)
+
     def _cta_recent(self, item: dict) -> bool:
         """Non ripetere l'invito alla stessa persona entro 30 giorni."""
         if not item.get("author_ref"):
@@ -151,7 +163,7 @@ class Pipeline:
         since = now_iso(-timedelta(days=30))
         r = self.db.one("""SELECT 1 AS x FROM response_drafts d JOIN social_items s ON s.id=d.social_item_id
                            WHERE s.author_ref=? AND s.platform=? AND d.status='published' AND d.created_at>=?
-                           AND (d.text LIKE '%contattare%' OR d.text LIKE '%reach %')""",
+                           AND d.cta IS NOT NULL""",
                         (item["author_ref"], item["platform"], since))
         return bool(r)
 
@@ -168,16 +180,22 @@ class Pipeline:
             return {"status": "already_published", "external_id": done["external_response_id"]}
         if self.settings.kill_switch_active() or self.settings.kill_switch_active(platform):
             raise PermissionError("Kill switch attivo: pubblicazione bloccata")
-        if actor.startswith("user:") and d["status"] not in ("approved", "pending"):
-            raise ValueError(f"Bozza in stato {d['status']}: non pubblicabile")
-        if actor == "system:auto" and d["decision"] != "publish":
-            raise PermissionError("Pubblicazione automatica non autorizzata dalla policy")
         conn = self.connectors.get(platform)
         if conn is None:
             raise NotSupported("Nessun connettore per la piattaforma")
         caps = conn.capabilities()
         if not (caps.reply_comment if item["kind"] == "comment" else caps.reply_post):
             raise NotSupported("Il canale non consente la pubblicazione via API: pubblica a mano e segna come gestito")
+        # policy applicata lato server a ogni singola azione, con la validazione del testo attuale
+        from ..response.engine import validate_reply
+        cites = jload(d["citations"], [])
+        hits_like = [type("H", (), {"title": c.get("title", ""), "heading": c.get("section") or "",
+                                    "text": self._chunk_text(c.get("chunk_id")), "url": c.get("url")})() for c in cites]
+        cta_urls = [self.settings.get(k) for k in ("cta.contact_url", "cta.demo_url", "cta.course_url", "cta.quote_url")
+                    if self.settings.get(k)]
+        self.policy.authorize_publish(category=item["category"], channel=platform, actor=actor, draft_status=d["status"],
+                                      draft_decision=d["decision"],
+                                      validation_errors=validate_reply(d["text"], hits_like, self.settings, cta_urls))
         with self.db.tx() as c:
             existing = c.execute("SELECT * FROM published_responses WHERE idempotency_key=?", (key,)).fetchone()
             if existing and existing["status"] == "published":

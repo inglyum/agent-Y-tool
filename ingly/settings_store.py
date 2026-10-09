@@ -9,6 +9,7 @@ from .db import Database, jdump, jload, now_iso
 DEFAULTS: dict[str, Any] = {
     "agent.enabled": True,
     "automation.kill_switch": False,          # True = nessuna azione esterna automatica
+    "automation.auto_safe_enabled": False,    # si cambia solo con lo sblocco verificato (non da impostazioni)
     "automation.channel_kill": {"facebook": False, "instagram": False},
     "automation.global_max_per_hour": 10,
     "automation.global_max_per_day": 50,
@@ -47,7 +48,11 @@ class SettingsStore:
             out[r["key"]] = jload(r["value"])
         return out
 
-    def set(self, key: str, value: Any, user_id: int | None = None) -> None:
+    PROTECTED = {"automation.auto_safe_enabled"}
+
+    def set(self, key: str, value: Any, user_id: int | None = None, _internal: bool = False) -> None:
+        if key in self.PROTECTED and not _internal:
+            raise ValueError(f"{key} si modifica solo dalla procedura dedicata")
         if key not in DEFAULTS:
             raise KeyError(f"Impostazione sconosciuta: {key}")
         expected = type(DEFAULTS[key])
