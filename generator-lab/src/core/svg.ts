@@ -19,6 +19,8 @@ export interface SvgLayer {
   paths: string[];
   /** Testo live opzionale (dipende dal font installato). */
   texts?: { x: number; y: number; size: number; text: string; family: string; anchor: 'start' | 'middle' | 'end' }[];
+  /** Colore personalizzato (es. livelli di colore della vettorializzazione); default = colore della lavorazione. */
+  color?: string;
 }
 
 export interface SvgDocOptions {
@@ -28,6 +30,8 @@ export interface SvgDocOptions {
   layers: SvgLayer[];
   /** Metadati descrittivi (parametri usati), scritti in <desc>. */
   description?: string;
+  /** Markup già generato dal motore (immagini incorporate, clipPath) inserito prima dei livelli. */
+  raw?: string;
 }
 
 const XML_ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
@@ -47,12 +51,13 @@ export function svgDocument(o: SvgDocOptions): string {
   if (!(o.widthMm > 0 && o.heightMm > 0)) throw new Error('Dimensioni del documento SVG non valide');
   const W = fmt(o.widthMm), H = fmt(o.heightMm);
   let s = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  s += `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">\n`;
+  s += `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">\n`;
   s += `<title>${escapeXml(o.title)}</title>\n`;
   if (o.description) s += `<desc>${escapeXml(o.description)}</desc>\n`;
+  if (o.raw) s += o.raw;
   for (const L of o.layers) {
     if (!L.paths.length && !(L.texts && L.texts.length)) continue;
-    const st = OP_STYLE[L.op];
+    const st = L.color && /^#[0-9A-Fa-f]{6}$/.test(L.color) ? { ...OP_STYLE[L.op], color: L.color.toUpperCase() } : OP_STYLE[L.op];
     const fill = L.op === 'engrave' ? st.color : 'none';
     const stroke = L.op === 'engrave' ? 'none' : st.color;
     const label = escapeXml(L.label ?? st.label);

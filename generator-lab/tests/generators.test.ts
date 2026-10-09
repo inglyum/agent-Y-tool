@@ -40,7 +40,7 @@ test('ogni generatore: valori iniziali senza errori (tranne Image Prep/Cost Lab 
     const { issues } = normalizeParams(g.params, g.defaults, g.defaults);
     const typeErrors = issues.filter((i) => i.level === 'error' && !/dato mancante/.test(i.message));
     assert.deepEqual(typeErrors, [], g.id);
-    if (g.id === 'image-prep' || g.id === 'cost-lab') continue;
+    if (['image-prep', 'cost-lab', 'print-cut', 'vectorize'].includes(g.id)) continue;
     assert.deepEqual(errors(g.run(g.defaults, { files: {} })), [], g.id);
   }
   assert.equal(new Set(GENERATORS.map((g) => g.slug)).size, GENERATORS.length, 'slug univoci');

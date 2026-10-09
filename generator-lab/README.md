@@ -16,12 +16,14 @@ ogni app è già pronta da copiare e incollare (file HTML, copertina, testi dell
 | 04 | **Batch & Nesting**: pezzi su lastra (MaxRects) | ZIP con SVG per lastra + report CSV | completo (rettangoli d'ingombro) |
 | 05 | **Image Prep**: grigi, soglia, dithering, retino | PNG con DPI nel file | completo |
 | 06 | **Material & Cost Lab**: catalogo materiali e preventivi | CSV / JSON | completo |
+| 07 | **Print & Cut**: adesivi e sagomati, contorno di taglio automatico, crocini | ZIP: stampa (PNG con DPI + SVG) e taglio (SVG) | completo |
+| 08 | **Image → SVG**: vettorializzazione bianco/nero o a livelli di colore | SVG, ZIP con un SVG per livello | completo |
 
 ## Comandi
 
 ```bash
 npm install
-npm test            # 49 test unitari, geometrici e di esportazione (node:test)
+npm test            # 63 test unitari, geometrici, raster e di esportazione (node:test)
 npm run typecheck   # TypeScript strict
 npm run build       # dist/index.html (suite) + atomm-release/<slug>/<slug>.html
 npm run e2e         # test nel browser (Chromium) sui file finali
@@ -42,6 +44,9 @@ src/
     geometry.ts     geometry-engine: primitive in mm, distanze, intersezioni, PRNG deterministico
     rectilinear.ts  contorni esatti di regioni rettilinee (dita, cave)
     nesting.ts      MaxRects Best Short Side Fit + verifica indipendente
+    raster.ts       raster-engine: EDT esatta (Felzenszwalb), dilatazione/chiusura, tracciamento contorni,
+                    rimozione scalette + RDP, curve con spigoli preservati, k-means deterministico
+    canvas.ts       codifica PNG / data URL nel browser
     svg.ts          svg-engine: documenti in mm, livelli per lavorazione, escape XML, validatore
     export.ts       export-engine: nomi file, ZIP (store), CRC32, PNG con pHYs, CSV sicuro
     fonts.ts        testo → tracciati (opentype.js + font OFL incorporati)
@@ -73,6 +78,17 @@ La UI non contiene geometria: per aggiungere un generatore crea `src/generators/
 - **Layer & Light**: cornice minima, ponti fra finestre sotto lo spessore minimo, fori di registrazione
   lontani da bordi e finestre su tutti i livelli.
 - **Nesting**: verifica indipendente di margini, distanze e sovrapposizioni; pezzi non collocabili con motivo.
+
+- **Print & Cut**: soggetto trovato, contorno di taglio a distanza costante (verificata nei test entro 0,35 mm),
+  copie fuori dalla zona dei crocini, risoluzione del disegno sufficiente per la stampa, foglio troppo piccolo.
+- **Image → SVG**: nessuna forma trovata, complessità eccessiva (nodi), livelli di colore impilati senza fessure.
+
+### Print & Cut: come funziona
+1. Il soggetto si ricava dalla trasparenza del PNG oppure dal colore uniforme dello sfondo (tolleranza regolabile).
+2. Il contorno di taglio è la dilatazione esatta del soggetto (trasformata di distanza euclidea), poi una chiusura
+   morfologica elimina rientranze più strette del doppio dell'arrotondamento.
+3. Il file di STAMPA è ritagliato sul contorno + abbondanza; i crocini sono identici nei due file, sulla stessa tavola in mm.
+4. I crocini sono generici (quadrati pieni): verifica il formato richiesto dal software della tua macchina o usa la telecamera.
 
 ### Dati e privacy
 - Le immagini di Image Prep restano nel browser: nessun invio a servizi esterni.

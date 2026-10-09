@@ -10,6 +10,8 @@ Ogni cartella qui dentro è **un'app Atomm completa**:
 | `batch-nesting/` | batch-nesting | Disposizione pezzi su lastra |
 | `image-prep/` | image-prep | Foto e loghi per incisione |
 | `material-cost-lab/` | material-cost-lab | Catalogo materiali e preventivi |
+| `print-and-cut/` | print-and-cut | Adesivi e sagomati: stampa + taglio sul contorno |
+| `image-to-svg/` | image-to-svg | Converte immagini in SVG vettoriali |
 
 In ogni cartella trovi 3 file:
 

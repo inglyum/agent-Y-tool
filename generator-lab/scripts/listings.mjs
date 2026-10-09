@@ -133,4 +133,48 @@ before/after preview and PNG export with embedded DPI.`,
 breakdown (material, waste, machine time, labour, consumables, overhead, fees, margin, VAT). Nothing is
 invented — missing data is requested from you. CSV/JSON export.`,
   },
+  {
+    generator: 'print-cut',
+    slug: 'print-and-cut',
+    title: 'INGLY Print & Cut',
+    titleEn: 'INGLY Print & Cut Sticker Maker',
+    short: 'Adesivi e sagomati: contorno di taglio automatico, abbondanza e crocini su foglio pronto.',
+    shortEn: 'Stickers and die-cut shapes: automatic cut contour, bleed and registration marks on a ready sheet.',
+    crafts: ['Stampa → Taglio di coltello', 'Stampa → Stampa UV', 'Stampa → Stampa a inchiostro', 'Laser → Taglio'],
+    detailed: `Trasforma un'immagine in adesivi, magneti e sagomati pronti da stampare e tagliare.
+
+• Riconosce il soggetto da solo: PNG con trasparenza oppure sfondo uniforme
+• Contorno di taglio a distanza costante, con arrotondamento che elimina rientranze impossibili da tagliare
+• Bordo del colore del materiale oppure colori estesi fino al taglio, con abbondanza configurabile
+• Foglio con più copie disposte automaticamente (A4 o misura libera)
+• Crocini di registrazione a 3 o 4 angoli, identici nel file di stampa e in quello di taglio
+• File di STAMPA (PNG con DPI e SVG) e file di TAGLIO (SVG in mm) perfettamente allineati
+• Lunghezza di taglio e numero di copie calcolati
+• L'immagine resta sul tuo dispositivo`,
+    detailedEn: `Turn an image into print-then-cut stickers, magnets and shapes: automatic subject detection (transparency or plain
+background), constant-offset cut contour with smoothing, optional colour bleed, multi-copy sheet layout, 3- or
+4-corner registration marks, aligned PRINT (PNG with DPI / SVG) and CUT (SVG in mm) files. Runs locally.`,
+  },
+  {
+    generator: 'vectorize',
+    slug: 'image-to-svg',
+    title: 'INGLY Image → SVG',
+    titleEn: 'INGLY Image to SVG Vectorizer',
+    short: 'Vettorializza loghi, disegni e foto in SVG in millimetri, in bianco e nero o a livelli di colore.',
+    shortEn: 'Vectorize logos, drawings and photos to millimetre SVG, black & white or colour layers.',
+    crafts: ['Laser → Incisione', 'Laser → Taglio', 'Stampa → Stampa UV', 'Stampa → Taglio di coltello'],
+    detailed: `Converte un'immagine raster in un SVG vettoriale pronto per laser, plotter e stampa.
+
+• Bianco e nero con soglia regolabile e inversione
+• A colori: da 2 a 12 livelli, impilati senza fessure fra un colore e l'altro (stile carta stratificata)
+• Curve morbide con spigoli vivi dove servono (soglia angolo regolabile)
+• Semplificazione dei nodi ed eliminazione delle macchioline
+• Dimensione finale in millimetri
+• Uscita a forme piene (stampa / incisione), contorni rossi per il taglio o riempimento nero
+• ZIP con un SVG per livello per i lavori a strati
+• Anteprima originale/vettoriale; l'immagine resta sul tuo dispositivo`,
+    detailedEn: `Convert raster images into clean SVG for laser, plotter and print: black & white threshold or 2–12 stacked colour
+layers without gaps, smooth curves with preserved corners, node simplification, speckle removal, millimetre sizing,
+filled / cut / engrave output and one SVG per layer. Runs locally in your browser.`,
+  },
 ];

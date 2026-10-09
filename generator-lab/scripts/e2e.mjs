@@ -62,6 +62,34 @@ async function setField(page, gen, key, value) {
   await page.waitForFunction(() => !document.querySelector('.status.processing'));
 }
 
+/** Disegni dimostrativi sintetici creati nel browser (nessuna immagine di terzi). */
+async function demoArt(page, kind) {
+  const bytes = await page.evaluate(async (kind) => {
+    const cv = document.createElement('canvas');
+    const g = cv.getContext('2d');
+    if (kind === 'sticker') {
+      cv.width = 800; cv.height = 600;
+      g.translate(400, 300);
+      g.fillStyle = '#facc15';
+      g.beginPath();
+      for (let i = 0; i < 24; i++) { const r = i % 2 ? 170 : 250, a = (i / 24) * Math.PI * 2; g.lineTo(r * Math.cos(a), r * Math.sin(a)); }
+      g.closePath(); g.fill();
+      g.fillStyle = '#111827'; g.beginPath(); g.arc(0, 0, 140, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffffff'; g.font = 'bold 86px sans-serif'; g.textAlign = 'center'; g.fillText('INGLY', 0, 30);
+    } else {
+      cv.width = 900; cv.height = 600;
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, 900, 600);
+      g.fillStyle = '#1d4f91'; g.beginPath(); g.moveTo(80, 520); g.lineTo(330, 120); g.lineTo(580, 520); g.closePath(); g.fill();
+      g.fillStyle = '#facc15'; g.beginPath(); g.arc(650, 200, 110, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#b42318'; g.beginPath(); g.moveTo(420, 520); g.lineTo(600, 260); g.lineTo(820, 520); g.closePath(); g.fill();
+      g.fillStyle = '#111827'; g.font = 'bold 110px sans-serif'; g.fillText('INGLY', 260, 590);
+    }
+    const b = await new Promise((r) => cv.toBlob(r, 'image/png'));
+    return Array.from(new Uint8Array(await b.arrayBuffer()));
+  }, kind);
+  return Buffer.from(bytes);
+}
+
 const statText = (page) => page.$eval('.stats', (e) => e.textContent);
 
 for (const l of LISTINGS) {
@@ -77,6 +105,12 @@ for (const l of LISTINGS) {
     const png = await page.screenshot({ clip: { x: 0, y: 0, width: 320, height: 200 } });
     await page.setInputFiles(`#p-${gen}-image`, { name: 'prova.png', mimeType: 'image/png', buffer: png });
     await page.waitForFunction(() => document.querySelector('.content canvas'), null, { timeout: 15000 });
+    await page.waitForFunction(() => !document.querySelector('.status.processing'));
+  }
+  if (gen === 'print-cut' || gen === 'vectorize') {
+    ok((await page.$$eval('.issue.error', (e) => e.map((x) => x.textContent).join('|'))).includes('Carica'), 'chiede di caricare un\'immagine');
+    await page.setInputFiles(`#p-${gen}-image`, { name: 'demo.png', mimeType: 'image/png', buffer: await demoArt(page, gen === 'print-cut' ? 'sticker' : 'logo') });
+    await page.waitForFunction(() => document.querySelector('.content svg path'), null, { timeout: 20000 });
     await page.waitForFunction(() => !document.querySelector('.status.processing'));
   }
   if (gen === 'cost-lab') {
@@ -137,6 +171,21 @@ for (const l of LISTINGS) {
     await page.click('button:has-text("Reset")');
     await page.waitForTimeout(300);
   }
+  if (gen === 'print-cut') {
+    ok(await page.$('.content svg image') !== null, 'anteprima con disegno e contorno di taglio');
+    const png = await exportViaButton(page, 'print-png');
+    ok(png.bytes.subarray(1, 4).toString() === 'PNG' && png.bytes.includes(Buffer.from('pHYs')), `PNG di stampa con DPI (${png.bytes.length} byte)`);
+    const cut = await exportViaButton(page, 'cut');
+    ok(checkSvgText(cut.bytes.toString('utf8')) && cut.bytes.toString('utf8').includes('data-operation="cut"'), 'SVG di taglio in mm');
+    const zip = await exportViaButton(page, 'zip');
+    ok(['stampa.png', 'stampa.svg', 'taglio.svg'].every((n) => zip.bytes.includes(Buffer.from(n))), 'ZIP con stampa PNG + SVG e taglio');
+  }
+  if (gen === 'vectorize') {
+    await setField(page, gen, 'mode', 'color');
+    ok((await statText(page)).includes('#'), 'modalità a colori con livelli');
+    const z = await exportViaButton(page, 'zip');
+    ok(z.bytes.readUInt32LE(0) === 0x04034b50, 'ZIP con un SVG per livello');
+  }
   if (gen === 'box') {
     await setField(page, gen, 'divX', 1);
     await setField(page, gen, 'divY', 2);
@@ -184,6 +233,14 @@ for (const l of LISTINGS) {
       });
       await c.page.setInputFiles(`#p-${gen}-image`, { name: 'demo.png', mimeType: 'image/png', buffer: Buffer.from(demo) });
       await c.page.waitForFunction(() => document.querySelector('.content canvas'));
+    }
+    if (gen === 'print-cut' || gen === 'vectorize') {
+      await c.page.setInputFiles(`#p-${gen}-image`, { name: 'demo.png', mimeType: 'image/png', buffer: await demoArt(c.page, gen === 'print-cut' ? 'sticker' : 'logo') });
+      await c.page.waitForFunction(() => document.querySelector('.content svg path'), null, { timeout: 20000 });
+      if (gen === 'vectorize') {
+        await setField(c.page, gen, 'mode', 'color');
+        await setField(c.page, gen, 'colors', 5);
+      }
     }
     if (gen === 'box') {
       await setField(c.page, gen, 'divX', 1);
