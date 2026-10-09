@@ -1,5 +1,5 @@
 """Knowledge engine: import, metadati, deduplica, versioni, crawler, RAG, compatibilità, conflitti."""
-from conftest import FIXTURES, official_source_id, site_transport
+from conftest import FIXTURES, PUBLIC_GUARD, official_source_id, site_transport
 
 from ingly.knowledge.catalog import Catalog
 from ingly.knowledge.crawler import Crawler, import_file
@@ -28,7 +28,7 @@ def make_pdf(text: str) -> bytes:
 # 1. importazione di pagine e documenti
 def test_import_html_and_pdf(svc):
     sid = official_source_id(svc)
-    r = import_file(svc.db, sid, "a.html", (FIXTURES / "product_a.html").read_bytes(), "https://support.example.test/a")
+    r = import_file(svc.db, sid, "a.html", (FIXTURES / "product_a.html").read_bytes(), "https://support.example.test/a", store=svc.kb)
     assert r["outcome"] == "new" and r["version"] == 1
     p = import_file(svc.db, sid, "manuale.pdf", make_pdf("Manuale di prova pulizia lente"), "https://support.example.test/m.pdf")
     assert p["outcome"] == "new"
@@ -58,15 +58,15 @@ def test_extract_pdf_text():
 def test_dedup_unchanged_changed_duplicate(svc):
     sid = official_source_id(svc)
     html = (FIXTURES / "product_a.html").read_bytes()
-    first = import_file(svc.db, sid, "a.html", html, "https://support.example.test/a")
-    again = import_file(svc.db, sid, "a.html", html, "https://support.example.test/a")
+    first = import_file(svc.db, sid, "a.html", html, "https://support.example.test/a", store=svc.kb)
+    again = import_file(svc.db, sid, "a.html", html, "https://support.example.test/a", store=svc.kb)
     assert again["outcome"] == "unchanged"
     dup = import_file(svc.db, sid, "copy.html", html, "https://support.example.test/copia")
     assert dup["outcome"] == "duplicate"
-    n_chunks = svc.db.one("SELECT COUNT(*) n FROM knowledge_chunks WHERE active=1")["n"]
-    changed = import_file(svc.db, sid, "a.html", html.replace(b"20 W", b"22 W"), "https://support.example.test/a")
+    n_chunks = svc.db.one("SELECT COUNT(*) n FROM document_chunks WHERE active=1")["n"]
+    changed = import_file(svc.db, sid, "a.html", html.replace(b"20 W", b"22 W"), "https://support.example.test/a", store=svc.kb)
     assert changed["outcome"] == "changed" and changed["version"] == 2
-    assert svc.db.one("SELECT COUNT(*) n FROM knowledge_chunks WHERE active=1")["n"] == n_chunks
+    assert svc.db.one("SELECT COUNT(*) n FROM document_chunks WHERE active=1")["n"] == n_chunks
     assert len(svc.kb.versions(first["document_id"])) == 2
     assert svc.retriever.search("potenza laser 22")[0].text.count("22 W") == 1
 
@@ -84,17 +84,16 @@ def test_crawler_respects_robots_sitemap_and_detects_gone(svc, settings):
         f"{base}/it-it/b": (200, "text/html", (FIXTURES / "guide_b.html").read_text()),
     }
     seen: list = []
-    import httpx
-    client = httpx.Client(transport=site_transport(pages, seen))
     sid = svc.db.run("""INSERT INTO sources (key,name,base_url,kind,priority,region,crawl_enabled,allowed_path_prefixes,created_at)
                         VALUES ('test','Test','https://docs.example.test/it-it','official',1,'it-IT',1,'["/it-it"]','2026-01-01')""")
-    crawler = Crawler(svc.db, settings, client=client, sleep=lambda s: None)
+    crawler = Crawler(svc.db, settings, transport=site_transport(pages, seen), sleep=lambda s: None, store=svc.kb, guard=PUBLIC_GUARD)
     rep = crawler.crawl_source(sid)
     assert f"{base}/privato/x" not in seen          # robots.txt rispettato
     assert rep.new >= 2 and rep.stopped_reason is None
     # la pagina b sparisce: deve essere marcata come non più disponibile
     del pages[f"{base}/it-it/b"]
-    rep2 = Crawler(svc.db, settings, client=httpx.Client(transport=site_transport(pages)), sleep=lambda s: None).crawl_source(sid)
+    rep2 = Crawler(svc.db, settings, transport=site_transport(pages), sleep=lambda s: None, store=svc.kb,
+                   guard=PUBLIC_GUARD).crawl_source(sid)
     assert rep2.gone == 1
     assert svc.db.one("SELECT status FROM documents WHERE url=?", (f"{base}/it-it/b",))["status"] == "gone"
     assert svc.db.one("SELECT COUNT(*) n FROM knowledge_updates WHERE kind='gone'")["n"] == 1
@@ -106,7 +105,8 @@ def test_crawler_stops_on_403(svc, settings):
     pages = {f"{base}/robots.txt": (404, "text/plain", ""), f"{base}/": (403, "text/html", "denied")}
     sid = svc.db.run("""INSERT INTO sources (key,name,base_url,kind,priority,crawl_enabled,created_at)
                         VALUES ('blk','Blk','https://blocked.example.test/','official',1,1,'2026-01-01')""")
-    rep = Crawler(svc.db, settings, client=httpx.Client(transport=site_transport(pages)), sleep=lambda s: None).crawl_source(sid)
+    rep = Crawler(svc.db, settings, transport=site_transport(pages), sleep=lambda s: None, store=svc.kb,
+                  guard=PUBLIC_GUARD).crawl_source(sid)
     assert rep.stopped_reason and "403" in rep.stopped_reason
     assert svc.db.one("SELECT last_crawl_status FROM sources WHERE id=?", (sid,))["last_crawl_status"] == "failed"
 

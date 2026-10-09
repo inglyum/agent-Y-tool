@@ -153,11 +153,11 @@ def validate_reply(text: str, hits: list[Hit], settings: SettingsStore, cta_urls
 
 
 class ResponseEngine:
-    def __init__(self, db: Database, ai: MeteredAI, settings: SettingsStore):
+    def __init__(self, db: Database, ai: MeteredAI, settings: SettingsStore, retriever: Retriever | None = None):
         self.db = db
         self.ai = ai
         self.settings = settings
-        self.retriever = Retriever(db)
+        self.retriever = retriever or Retriever(db)
 
     def ai_classify(self, text: str) -> dict | None:
         if not self.ai.available:

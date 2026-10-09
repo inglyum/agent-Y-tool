@@ -6,12 +6,17 @@ import getpass
 import json
 import shutil
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
 from .audit import configure_logging
 from .config import get_settings
 from .db import now_iso
+
+
+def is_pg(url: str) -> bool:
+    return url.startswith(("postgres://", "postgresql://"))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("import-yaml", help="Importa le schede YAML di knowledge/ nel catalogo")
     bk = sub.add_parser("backup", help="Backup consistente del database")
     bk.add_argument("dest", nargs="?")
+    sub.add_parser("reembed", help="Ricalcola embedding e prodotti citati di tutti i chunk")
     rs = sub.add_parser("restore", help="Ripristina un backup (sovrascrive il database corrente)")
     rs.add_argument("src")
     a = p.parse_args(argv)
@@ -53,9 +59,14 @@ def main(argv: list[str] | None = None) -> int:
         if not src.exists():
             print("Backup inesistente", file=sys.stderr)
             return 1
-        shutil.copy2(settings.database_path, settings.database_path + ".pre-restore") if Path(settings.database_path).exists() else None
-        with sqlite3.connect(src) as s, sqlite3.connect(settings.database_path) as d:
-            s.backup(d)
+        if is_pg(settings.database_path):
+            # il dump è in formato custom: pg_restore ricrea gli oggetti (--clean) nel database configurato
+            subprocess.run(["pg_restore", "--clean", "--if-exists", "--no-owner", "-d", settings.database_path, str(src)], check=True)
+        else:
+            if Path(settings.database_path).exists():
+                shutil.copy2(settings.database_path, settings.database_path + ".pre-restore")
+            with sqlite3.connect(src) as s, sqlite3.connect(settings.database_path) as d:
+                s.backup(d)
         print(f"Ripristinato da {src}")
         return 0
 
@@ -94,14 +105,21 @@ def main(argv: list[str] | None = None) -> int:
         if not src:
             print("Fonte inesistente", file=sys.stderr)
             return 1
-        print(import_file(svc.db, src["id"], Path(a.file).name, Path(a.file).read_bytes(), a.url))
+        print(import_file(svc.db, src["id"], Path(a.file).name, Path(a.file).read_bytes(), a.url, store=svc.kb))
     elif a.cmd == "import-yaml":
         print(svc.catalog.import_yaml_cards())
     elif a.cmd == "backup":
-        dest = Path(a.dest or f"{settings.database_path}.{now_iso().replace(':', '')}.bak")
-        with sqlite3.connect(settings.database_path) as s, sqlite3.connect(dest) as d:
-            s.backup(d)
+        stamp = now_iso().replace(":", "")
+        if svc.db.is_postgres:
+            dest = Path(a.dest or f"ingly-{stamp}.dump")
+            subprocess.run(["pg_dump", "-Fc", "-f", str(dest), settings.database_path], check=True)
+        else:
+            dest = Path(a.dest or f"{settings.database_path}.{stamp}.bak")
+            with sqlite3.connect(settings.database_path) as s, sqlite3.connect(dest) as d:
+                s.backup(d)
         print(f"Backup scritto in {dest}")
+    elif a.cmd == "reembed":
+        print({"chunks": svc.kb.reindex(), "embedder": svc.kb.embedder.name})
     return 0
 
 

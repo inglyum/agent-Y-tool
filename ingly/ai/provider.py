@@ -114,7 +114,7 @@ def build_provider(settings: Settings) -> AIProvider:
 
 
 class MeteredAI:
-    """Avvolge un provider: controlla il budget, registra uso/costi/errori in model_usage."""
+    """Avvolge un provider: controlla il budget, registra uso/costi/errori in ai_usage."""
 
     def __init__(self, provider: AIProvider, db: Database, settings_store):
         self.provider = provider
@@ -131,7 +131,7 @@ class MeteredAI:
 
     def month_cost(self) -> float:
         start = utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
-        r = self.db.one("SELECT COALESCE(SUM(cost_eur),0) AS c FROM model_usage WHERE at >= ?", (start,))
+        r = self.db.one("SELECT COALESCE(SUM(cost_eur),0) AS c FROM ai_usage WHERE at >= ?", (start,))
         return float(r["c"])
 
     def complete_json(self, system: str, user: str, schema: dict, purpose: str, max_tokens: int = 4000) -> AIResult:
@@ -141,14 +141,14 @@ class MeteredAI:
         try:
             res = self.provider.complete_json(system, user, schema, purpose, max_tokens)
         except Exception as e:
-            self.db.run("""INSERT INTO model_usage (at,provider,model,purpose,ok,error) VALUES (?,?,?,?,0,?)""",
+            self.db.run("""INSERT INTO ai_usage (at,provider,model,purpose,ok,error) VALUES (?,?,?,?,0,?)""",
                         (now_iso(), self.provider.name, self.provider.model, purpose, str(e)[:500]))
             log.warning("ai call failed", extra={"data": {"purpose": purpose, "error": str(e)}})
             raise
         pin = float(self.settings.get("ai.price_per_mtok_in_eur"))
         pout = float(self.settings.get("ai.price_per_mtok_out_eur"))
         cost = res.input_tokens / 1e6 * pin + res.output_tokens / 1e6 * pout
-        self.db.run("""INSERT INTO model_usage (at,provider,model,purpose,input_tokens,output_tokens,cost_eur,latency_ms,ok)
+        self.db.run("""INSERT INTO ai_usage (at,provider,model,purpose,input_tokens,output_tokens,cost_eur,latency_ms,ok)
                        VALUES (?,?,?,?,?,?,?,?,1)""",
                     (now_iso(), self.provider.name, res.model, purpose, res.input_tokens, res.output_tokens, cost, res.latency_ms))
         return res

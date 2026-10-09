@@ -13,6 +13,8 @@ from .db import Database, now_iso
 from .jobs.scheduler import JobQueue, RetryLater
 from .knowledge.catalog import Catalog, seed_sources
 from .knowledge.crawler import Crawler
+from .knowledge.embed import build_embedder
+from .knowledge.netguard import NetGuard
 from .knowledge.rag import Retriever
 from .knowledge.store import KnowledgeStore
 from .response.engine import ResponseEngine, seed_prompts
@@ -42,13 +44,16 @@ class Services:
     oauth: MetaOAuth
     jobs: JobQueue
     http: httpx.Client | None = None
+    crawler_transport: httpx.BaseTransport | None = None
+    guard: NetGuard | None = None
 
     def crawler(self) -> Crawler:
-        return Crawler(self.db, self.settings, client=self.http)
+        return Crawler(self.db, self.settings, transport=self.crawler_transport, store=self.kb, guard=self.guard)
 
 
 def build_services(settings: Settings | None = None, ai_provider=None, http_client: httpx.Client | None = None,
-                   bootstrap: bool = True) -> Services:
+                   bootstrap: bool = True, crawler_transport: httpx.BaseTransport | None = None,
+                   guard: NetGuard | None = None) -> Services:
     settings = settings or get_settings()
     db = Database(settings.database_path)
     if bootstrap:
@@ -61,12 +66,15 @@ def build_services(settings: Settings | None = None, ai_provider=None, http_clie
         "instagram": InstagramConnector(db, settings, vault, http_client),
         "manual": ManualConnector(),
     }
-    engine = ResponseEngine(db, ai, store)
+    embedder = build_embedder(settings)
+    kb = KnowledgeStore(db, embedder)
+    retriever = Retriever(db, embedder)
+    engine = ResponseEngine(db, ai, store, retriever)
     policy = PolicyEngine(db, store)
     crm = CRM(db, int(store.get("crm.retention_days")))
-    svc = Services(settings, db, store, vault, ai, Catalog(db), KnowledgeStore(db), Retriever(db), engine, policy, crm,
+    svc = Services(settings, db, store, vault, ai, Catalog(db), kb, retriever, engine, policy, crm,
                    connectors, Pipeline(db, engine, policy, store, connectors, crm), MetaOAuth(db, settings, vault, http_client),
-                   JobQueue(db), http_client)
+                   JobQueue(db), http_client, crawler_transport, guard or NetGuard())
     if bootstrap:
         bootstrap_data(svc)
     register_handlers(svc)
@@ -74,6 +82,8 @@ def build_services(settings: Settings | None = None, ai_provider=None, http_clie
 
 
 def bootstrap_data(svc: Services) -> None:
+    # workspace predefinito (id 1): INGLY DESIGN
+    svc.db.run("INSERT OR IGNORE INTO workspaces (slug,name,created_at) VALUES ('ingly-design','INGLY DESIGN',?)", (now_iso(),))
     seed_roles(svc.db)
     seed_sources(svc.db)
     seed_rules(svc.db)
@@ -88,7 +98,7 @@ def bootstrap_data(svc: Services) -> None:
                   WHERE NOT EXISTS (SELECT 1 FROM social_sources WHERE kind='fb_group_manual')""", (now_iso(),))
     s = svc.settings
     if s.bootstrap_admin_email and s.bootstrap_admin_password and \
-            not svc.db.one("SELECT 1 AS x FROM users WHERE email=? COLLATE NOCASE", (s.bootstrap_admin_email,)):
+            not svc.db.one("SELECT 1 AS x FROM users WHERE email=lower(?)", (s.bootstrap_admin_email,)):
         create_user(svc.db, s.bootstrap_admin_email, s.bootstrap_admin_password, "admin")
     svc.jobs.set_schedule("check_tokens", 360)
     svc.jobs.set_schedule("retention_purge", 1440)
@@ -129,7 +139,7 @@ def register_handlers(svc: Services) -> None:
         if not svc.oauth.configured:
             return {"skipped": "Meta non configurato"}
         out = {}
-        for a in svc.db.all("SELECT id FROM social_accounts WHERE token_encrypted IS NOT NULL"):
+        for a in svc.db.all("SELECT id FROM social_connections WHERE token_encrypted IS NOT NULL"):
             out[a["id"]] = svc.oauth.check_token(a["id"])["status"]
         return out
 

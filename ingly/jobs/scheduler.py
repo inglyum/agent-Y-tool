@@ -60,7 +60,8 @@ class JobQueue:
             c.execute("""UPDATE jobs SET status='queued', locked_by=NULL, lease_until=NULL, updated_at=?,
                          last_error=COALESCE(last_error,'') || ' [lease scaduto]'
                          WHERE status='running' AND lease_until < ?""", (now, now))
-            row = c.execute("""SELECT * FROM jobs WHERE status='queued' AND run_after <= ? ORDER BY run_after, id LIMIT 1""",
+            lock = " FOR UPDATE SKIP LOCKED" if self.db.is_postgres else ""  # più worker: nessun doppio prelievo
+            row = c.execute(f"""SELECT * FROM jobs WHERE status='queued' AND run_after <= ? ORDER BY run_after, id LIMIT 1{lock}""",
                             (now,)).fetchone()
             if not row:
                 return None

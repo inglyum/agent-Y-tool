@@ -18,10 +18,10 @@ def manual_source(svc):
 
 
 def connect_facebook(svc, page_id="111", token="page-token"):
-    acc = svc.db.run("""INSERT INTO social_accounts (platform,external_id,name,auth_type,token_encrypted,status,connected_at)
+    acc = svc.db.run("""INSERT INTO social_connections (platform,external_id,name,auth_type,token_encrypted,status,connected_at)
                         VALUES ('facebook',?,?,'oauth_page_token',?,'connected','2026-10-01')""",
                      (page_id, "Pagina INGLY", svc.vault.encrypt(token)))
-    sid = svc.db.run("""INSERT INTO social_sources (account_id,platform,kind,external_id,name,active,created_at)
+    sid = svc.db.run("""INSERT INTO social_sources (connection_id,platform,kind,external_id,name,active,created_at)
                         VALUES (?,'facebook','page',?,'Pagina INGLY',1,'2026-10-01')""", (acc, page_id))
     return acc, svc.db.one("SELECT * FROM social_sources WHERE id=?", (sid,))
 
@@ -93,7 +93,7 @@ def test_auto_safe_publishes_once_with_idempotency(settings, fake_ai):
     # la pagina non risponde a sé stessa né due volte allo stesso commento
     assert svc.pipeline.poll_source(src["id"])["new"] == 0
     # 16. audit
-    actions = {r["action"] for r in svc.db.all("SELECT action FROM audit_logs")}
+    actions = {r["action"] for r in svc.db.all("SELECT action FROM audit_events")}
     assert {"pipeline.decision", "publish.ok", "automation.rule.update"} <= actions
 
 
@@ -135,7 +135,7 @@ def test_expired_token_marks_account(settings, fake_ai):
     acc, src = connect_facebook(svc)
     with pytest.raises(TokenExpired):
         svc.pipeline.poll_source(src["id"])
-    assert svc.db.one("SELECT status FROM social_accounts WHERE id=?", (acc,))["status"] == "expired"
+    assert svc.db.one("SELECT status FROM social_connections WHERE id=?", (acc,))["status"] == "expired"
     assert "scaduto" in svc.db.one("SELECT last_error FROM social_sources WHERE id=?", (src["id"],))["last_error"]
     # il job non viene ritentato all'infinito: va in dead-letter subito
     svc.jobs.enqueue("poll_social_source", {"source_id": src["id"]})
@@ -199,14 +199,14 @@ def test_oauth_flow_stores_encrypted_tokens(settings, fake_ai):
     assert "client_id=123" in url and "pages_manage_engagement" in url
     connected = svc.oauth.handle_callback("code", state)
     assert {c["platform"] for c in connected} == {"facebook", "instagram"}
-    acc = svc.db.one("SELECT token_encrypted FROM social_accounts WHERE platform='facebook'")
+    acc = svc.db.one("SELECT token_encrypted FROM social_connections WHERE platform='facebook'")
     assert "page-secret-token" not in acc["token_encrypted"]
     assert svc.vault.decrypt(acc["token_encrypted"]) == "page-secret-token"
     from ingly.social.base import ConnectorError
     with pytest.raises(ConnectorError):        # lo stesso state non può essere riusato
         svc.oauth.handle_callback("code", state)
     assert svc.db.one("SELECT active FROM social_sources WHERE external_id='111'")["active"] == 0   # attivazione esplicita
-    log_dump = json.dumps(svc.db.all("SELECT detail FROM audit_logs"))
+    log_dump = json.dumps(svc.db.all("SELECT detail FROM audit_events"))
     assert "page-secret-token" not in log_dump and "user-token" not in log_dump
 
 

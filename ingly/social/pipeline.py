@@ -51,8 +51,8 @@ class Pipeline:
             items = conn.fetch_new(source, source["last_success_at"])
         except TokenExpired as e:
             self._source_error(source, str(e))
-            if source.get("account_id"):
-                self.db.run("UPDATE social_accounts SET status='expired', last_error=? WHERE id=?", (str(e), source["account_id"]))
+            if source.get("connection_id"):
+                self.db.run("UPDATE social_connections SET status='expired', last_error=? WHERE id=?", (str(e), source["connection_id"]))
             raise
         except ConnectorError as e:
             self._source_error(source, str(e))
@@ -238,7 +238,7 @@ class Pipeline:
         return errors
 
     def _chunk_text(self, chunk_id) -> str:
-        r = self.db.one("SELECT text FROM knowledge_chunks WHERE id=?", (chunk_id,)) if chunk_id else None
+        r = self.db.one("SELECT text FROM document_chunks WHERE id=?", (chunk_id,)) if chunk_id else None
         return r["text"] if r else ""
 
     def approve(self, draft_id: int, user_id: int) -> None:

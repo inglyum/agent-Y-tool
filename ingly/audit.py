@@ -4,10 +4,9 @@ from __future__ import annotations
 import json
 import logging
 import re
-import sqlite3
 from typing import Any
 
-from .db import Database, now_iso
+from .db import Conn, Database, now_iso
 
 _SECRET_KEYS = re.compile(r"(token|secret|password|api_key|apikey|authorization|cookie|access_token)", re.I)
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -54,12 +53,12 @@ def configure_logging(level: int = logging.INFO) -> None:
 log = logging.getLogger("ingly")
 
 
-def audit(db: Database | sqlite3.Connection, actor: str, action: str, target_type: str | None = None,
+def audit(db: Database | Conn, actor: str, action: str, target_type: str | None = None,
           target_id: Any = None, detail: Any = None, user_id: int | None = None) -> None:
     row = (now_iso(), user_id, actor, action, target_type, None if target_id is None else str(target_id),
            json.dumps(redact(detail), ensure_ascii=False) if detail is not None else None)
-    sql = "INSERT INTO audit_logs (at,user_id,actor,action,target_type,target_id,detail) VALUES (?,?,?,?,?,?,?)"
-    if isinstance(db, sqlite3.Connection):
+    sql = "INSERT INTO audit_events (at,user_id,actor,action,target_type,target_id,detail) VALUES (?,?,?,?,?,?,?)"
+    if isinstance(db, Conn):
         db.execute(sql, row)
     else:
         db.run(sql, row)

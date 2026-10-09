@@ -88,7 +88,7 @@ def _token_hash(token: str) -> str:
 
 def login(db: Database, email: str, password: str) -> tuple[str, str] | None:
     """Ritorna (session_token, csrf_token) o None. Blocca dopo troppi tentativi."""
-    u = db.one("SELECT * FROM users WHERE email=? COLLATE NOCASE", (email.strip(),))
+    u = db.one("SELECT * FROM users WHERE email=lower(?)", (email.strip(),))
     if not u or not u["active"]:
         hashlib.scrypt(b"x", salt=b"y" * 16, n=2 ** 14, r=8, p=1)  # tempo costante approssimato
         return None
@@ -172,7 +172,7 @@ def rate_limit_hit(db: Database, bucket: str, limit: int, window_seconds: int) -
         count = (row[0] if row else 0)
         if count >= limit:
             return True
-        c.execute("INSERT INTO rate_limits VALUES (?,?,1) ON CONFLICT(bucket,window_start) DO UPDATE SET count=count+1",
+        c.execute("INSERT INTO rate_limits VALUES (?,?,1) ON CONFLICT(bucket,window_start) DO UPDATE SET count=rate_limits.count+1",
                   (bucket, ws))
         c.execute("DELETE FROM rate_limits WHERE bucket=? AND CAST(window_start AS INTEGER) < ?", (bucket, start - 7 * 86400))
     return False

@@ -264,7 +264,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
     def overview(user: dict = Depends(need("dashboard.view"))):
         since = now_iso(-timedelta(days=30))
         c = lambda sql, p=(): db.one(sql, p)["n"]  # noqa: E731
-        accounts = db.all("SELECT platform, name, status, last_error, token_expires_at FROM social_accounts")
+        accounts = db.all("SELECT platform, name, status, last_error, token_expires_at FROM social_connections")
         sources = db.all("SELECT name, platform, active, last_success_at, last_error FROM social_sources")
         return {
             "agent_enabled": svc.store.get("agent.enabled"),
@@ -275,7 +275,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
             "connections": {"accounts": accounts, "social_sources": sources, "meta_configured": svc.oauth.configured,
                             "meta_missing": svc.oauth.missing_config()},
             "kb": {"documents": c("SELECT COUNT(*) n FROM documents WHERE status='active'"),
-                   "chunks": c("SELECT COUNT(*) n FROM knowledge_chunks WHERE active=1"),
+                   "chunks": c("SELECT COUNT(*) n FROM document_chunks WHERE active=1"),
                    "products": c("SELECT COUNT(*) n FROM products"),
                    "products_verified": c("SELECT COUNT(*) n FROM products WHERE status='verified'"),
                    "sources_crawled_30d": c("SELECT COUNT(*) n FROM sources WHERE last_crawl_at>=?", (since,)),
@@ -291,7 +291,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
                                 UNION ALL SELECT 'fonte', name, last_error, last_crawl_at FROM sources WHERE last_error IS NOT NULL
                                 UNION ALL SELECT 'social', name, last_error, last_error_at FROM social_sources WHERE last_error IS NOT NULL
                                 ORDER BY at DESC LIMIT 10"""),
-            "recent": db.all("SELECT at, actor, action, target_type, target_id FROM audit_logs ORDER BY id DESC LIMIT 12"),
+            "recent": db.all("SELECT at, actor, action, target_type, target_id FROM audit_events ORDER BY id DESC LIMIT 12"),
         }
 
     @app.get("/api/analytics")
@@ -354,7 +354,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
                   user: dict = Depends(need("dashboard.view"))):
         hits = svc.retriever.search(q, products=[product] if product else None, limit=10)
         return {"evidence": svc.retriever.evidence_score(q, hits),
-                "hits": [{**h.citation(), "heading": h.heading, "text": h.text[:600], "score": round(h.score, 3),
+                "hits": [{**h.citation(), "text": h.text[:600], "score": round(h.score, 4),
                           "products": h.products, "kind": h.source_kind} for h in hits]}
 
     @app.get("/api/kb/documents")
@@ -390,7 +390,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
         if url and not url.startswith("https://"):
             raise HTTPException(400, "L'URL di origine deve essere https://")
         try:
-            res = import_file(db, source_id, file.filename or "documento", data, url)
+            res = import_file(db, source_id, file.filename or "documento", data, url, store=svc.kb)
         except ValueError as e:
             bad(e)
         audit(db, f"user:{user['id']}", "kb.import", "document", res["document_id"], {"file": file.filename}, user["id"])
@@ -412,7 +412,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
 
     @app.post("/api/kb/reindex")
     def kb_reindex(user: dict = Depends(need("kb.edit"))):
-        return {"chunks": svc.kb.reindex_products()}
+        return {"chunks": svc.kb.reindex()}
 
     @app.get("/api/kb/export")
     def kb_export(user: dict = Depends(need("kb.edit"))):
@@ -537,7 +537,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
     @app.get("/api/social/sources")
     def social_sources(user: dict = Depends(need("social.view"))):
         rows = db.all("""SELECT ss.*, sa.status AS account_status, sa.scopes, sa.token_expires_at FROM social_sources ss
-                         LEFT JOIN social_accounts sa ON sa.id=ss.account_id ORDER BY ss.platform, ss.name""")
+                         LEFT JOIN social_connections sa ON sa.id=ss.connection_id ORDER BY ss.platform, ss.name""")
         for r in rows:
             conn = svc.connectors.get(r["platform"])
             r["capabilities"] = conn.capabilities().__dict__ if conn else {}
@@ -550,7 +550,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
         if not s:
             raise HTTPException(404)
         if body.active and s["platform"] != "manual":
-            acc = db.one("SELECT status FROM social_accounts WHERE id=?", (s["account_id"],)) if s["account_id"] else None
+            acc = db.one("SELECT status FROM social_connections WHERE id=?", (s["connection_id"],)) if s["connection_id"] else None
             if not acc or acc["status"] != "connected":
                 raise HTTPException(400, "Collega prima l'account (OAuth)")
         if body.active is not None:
@@ -567,8 +567,8 @@ def create_app(svc: Services | None = None) -> FastAPI:
         return {"job_id": jid, "queued": jid is not None}
 
     @app.get("/api/social/accounts")
-    def social_accounts(user: dict = Depends(need("social.view"))):
-        rows = db.all("SELECT id,platform,external_id,name,auth_type,token_expires_at,scopes,status,last_error,connected_at FROM social_accounts")
+    def social_connections(user: dict = Depends(need("social.view"))):
+        rows = db.all("SELECT id,platform,external_id,name,auth_type,token_expires_at,scopes,status,last_error,connected_at FROM social_connections")
         for r in rows:
             r["scopes"] = jload(r["scopes"], [])
         return rows
@@ -872,7 +872,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
                                   connector_authenticated=True, already_published=False)
             out["draft"] = draft.__dict__
             out["decision_if_connected"] = d.__dict__
-            out["sources"] = [h.citation() | {"heading": h.heading} for h in hits]
+            out["sources"] = [h.citation() for h in hits]
         return out
 
     # ---------- valutazione ----------
@@ -930,18 +930,18 @@ def create_app(svc: Services | None = None) -> FastAPI:
     @app.get("/api/audit")
     def audit_log(action: str | None = None, limit: int = Query(200, le=2000), user: dict = Depends(need("audit.view"))):
         if action:
-            return db.all("SELECT * FROM audit_logs WHERE action LIKE ? ORDER BY id DESC LIMIT ?", (f"{action}%", limit))
-        return db.all("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,))
+            return db.all("SELECT * FROM audit_events WHERE action LIKE ? ORDER BY id DESC LIMIT ?", (f"{action}%", limit))
+        return db.all("SELECT * FROM audit_events ORDER BY id DESC LIMIT ?", (limit,))
 
     @app.get("/api/usage")
     def usage(user: dict = Depends(need("dashboard.view"))):
         return {"month_cost_eur": round(svc.ai.month_cost(), 4), "budget_eur": svc.store.get("ai.monthly_budget_eur"),
                 "by_day": db.all("""SELECT substr(at,1,10) AS day, COUNT(*) AS calls, SUM(input_tokens) AS tokens_in,
-                                    SUM(output_tokens) AS tokens_out, ROUND(SUM(cost_eur),4) AS cost_eur, SUM(1-ok) AS errors
-                                    FROM model_usage GROUP BY day ORDER BY day DESC LIMIT 60"""),
+                                    SUM(output_tokens) AS tokens_out, ROUND(CAST(SUM(cost_eur) AS NUMERIC),4) AS cost_eur, SUM(1-ok) AS errors
+                                    FROM ai_usage GROUP BY day ORDER BY day DESC LIMIT 60"""),
                 "by_purpose": db.all("""SELECT purpose, COUNT(*) AS calls, ROUND(AVG(latency_ms)) AS avg_ms, SUM(1-ok) AS errors
-                                        FROM model_usage GROUP BY purpose"""),
-                "recent_errors": db.all("SELECT at, purpose, error FROM model_usage WHERE ok=0 ORDER BY id DESC LIMIT 20")}
+                                        FROM ai_usage GROUP BY purpose"""),
+                "recent_errors": db.all("SELECT at, purpose, error FROM ai_usage WHERE ok=0 ORDER BY id DESC LIMIT 20")}
 
     @app.get("/api/jobs")
     def jobs(user: dict = Depends(need("dashboard.view"))):

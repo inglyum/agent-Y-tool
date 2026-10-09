@@ -146,23 +146,23 @@ class MetaOAuth:
         return connected
 
     def _save_account(self, platform, ext_id, name, token, scopes, expires_at):
-        self.db.run("""INSERT INTO social_accounts (platform,external_id,name,auth_type,token_encrypted,token_expires_at,scopes,
+        self.db.run("""INSERT INTO social_connections (platform,external_id,name,auth_type,token_encrypted,token_expires_at,scopes,
                        status,connected_at,last_error) VALUES (?,?,?,?,?,?,?,'connected',?,NULL)
                        ON CONFLICT(platform,external_id) DO UPDATE SET name=excluded.name, token_encrypted=excluded.token_encrypted,
                        token_expires_at=excluded.token_expires_at, scopes=excluded.scopes, status='connected',
                        connected_at=excluded.connected_at, last_error=NULL""",
                     (platform, ext_id, name, "oauth_page_token", self.vault.encrypt(token), expires_at, jdump(scopes), now_iso()))
-        acc = self.db.one("SELECT id FROM social_accounts WHERE platform=? AND external_id=?", (platform, ext_id))
+        acc = self.db.one("SELECT id FROM social_connections WHERE platform=? AND external_id=?", (platform, ext_id))
         kind = "page" if platform == "facebook" else "ig_business"
-        self.db.run("""INSERT INTO social_sources (account_id,platform,kind,external_id,name,active,limits_note,created_at)
+        self.db.run("""INSERT INTO social_sources (connection_id,platform,kind,external_id,name,active,limits_note,created_at)
                        SELECT ?,?,?,?,?,0,?,? WHERE NOT EXISTS
                        (SELECT 1 FROM social_sources WHERE platform=? AND external_id=?)""",
                     (acc["id"], platform, kind, ext_id, name, "Limiti Graph API per app/pagina: vedi docs/META_SETUP.md",
                      now_iso(), platform, ext_id))
 
-    def check_token(self, account_id: int) -> dict:
+    def check_token(self, connection_id: int) -> dict:
         """Verifica validità e permessi (debug_token). Aggiorna lo stato dell'account."""
-        acc = self.db.one("SELECT * FROM social_accounts WHERE id=?", (account_id,))
+        acc = self.db.one("SELECT * FROM social_connections WHERE id=?", (connection_id,))
         if not acc or not acc["token_encrypted"]:
             return {"status": "disconnected"}
         app_token = f"{self.settings.meta_app_id}|{self.settings.meta_app_secret}"
@@ -170,19 +170,19 @@ class MetaOAuth:
         try:
             info = g.get("debug_token", input_token=self.vault.decrypt(acc["token_encrypted"]), access_token=app_token)["data"]
         except ConnectorError as e:
-            self.db.run("UPDATE social_accounts SET status='error', last_error=? WHERE id=?", (str(e), account_id))
+            self.db.run("UPDATE social_connections SET status='error', last_error=? WHERE id=?", (str(e), connection_id))
             return {"status": "error", "error": str(e)}
         valid = bool(info.get("is_valid"))
         exp = info.get("expires_at") or 0
         status = "connected" if valid else "expired"
         from datetime import datetime, timezone
         exp_iso = datetime.fromtimestamp(exp, timezone.utc).isoformat(timespec="seconds") if exp else None
-        self.db.run("UPDATE social_accounts SET status=?, token_expires_at=?, scopes=?, last_error=? WHERE id=?",
-                    (status, exp_iso, jdump(info.get("scopes", [])), None if valid else "Token non valido", account_id))
+        self.db.run("UPDATE social_connections SET status=?, token_expires_at=?, scopes=?, last_error=? WHERE id=?",
+                    (status, exp_iso, jdump(info.get("scopes", [])), None if valid else "Token non valido", connection_id))
         return {"status": status, "expires_at": exp_iso, "scopes": info.get("scopes", [])}
 
-    def disconnect(self, account_id: int, user_id: int | None = None) -> None:
-        acc = self.db.one("SELECT * FROM social_accounts WHERE id=?", (account_id,))
+    def disconnect(self, connection_id: int, user_id: int | None = None) -> None:
+        acc = self.db.one("SELECT * FROM social_connections WHERE id=?", (connection_id,))
         if not acc:
             return
         if acc["token_encrypted"] and acc["platform"] == "facebook":
@@ -192,10 +192,10 @@ class MetaOAuth:
                     params={"access_token": self.vault.decrypt(acc["token_encrypted"])})
             except Exception:
                 pass
-        self.db.run("UPDATE social_accounts SET token_encrypted=NULL, status='disconnected', token_expires_at=NULL WHERE id=?",
-                    (account_id,))
-        self.db.run("UPDATE social_sources SET active=0 WHERE account_id=?", (account_id,))
-        audit(self.db, f"user:{user_id}" if user_id else "system", "social.disconnect", "social_account", account_id, None, user_id)
+        self.db.run("UPDATE social_connections SET token_encrypted=NULL, status='disconnected', token_expires_at=NULL WHERE id=?",
+                    (connection_id,))
+        self.db.run("UPDATE social_sources SET active=0 WHERE connection_id=?", (connection_id,))
+        audit(self.db, f"user:{user_id}" if user_id else "system", "social.disconnect", "social_account", connection_id, None, user_id)
 
 
 # ---------- Connettori ----------
@@ -206,12 +206,12 @@ class _MetaBase:
         self.db, self.settings, self.vault, self.http = db, settings, vault, client
 
     def account(self, source: dict) -> dict:
-        acc = self.db.one("SELECT * FROM social_accounts WHERE id=?", (source["account_id"],)) if source.get("account_id") else None
+        acc = self.db.one("SELECT * FROM social_connections WHERE id=?", (source["connection_id"],)) if source.get("connection_id") else None
         if not acc or acc["status"] != "connected" or not acc["token_encrypted"]:
             raise TokenExpired("Account non collegato o token non valido")
         exp = parse_iso(acc["token_expires_at"])
         if exp and exp <= utcnow():
-            self.db.run("UPDATE social_accounts SET status='expired' WHERE id=?", (acc["id"],))
+            self.db.run("UPDATE social_connections SET status='expired' WHERE id=?", (acc["id"],))
             raise TokenExpired("Token scaduto: ricollegare l'account")
         return acc
 

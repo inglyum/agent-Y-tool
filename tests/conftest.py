@@ -6,8 +6,10 @@ e non popolano la knowledge base reale.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 import httpx
@@ -17,10 +19,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ingly.ai.provider import AIResult  # noqa: E402
 from ingly.config import Settings  # noqa: E402
+from ingly.knowledge.netguard import NetGuard  # noqa: E402
 from ingly.security import create_user, generate_encryption_key  # noqa: E402
 from ingly.service import build_services  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
+# Esegui la suite anche su PostgreSQL: INGLY_TEST_DATABASE_URL=postgresql://postgres@/postgres?host=/tmp&port=54329
+PG_ADMIN_URL = os.environ.get("INGLY_TEST_DATABASE_URL")
+# Nei test i domini *.example.test "risolvono" a un IP pubblico di documentazione; i controlli SSRF restano attivi.
+PUBLIC_GUARD = NetGuard(resolver=lambda host, port: ["93.184.216.34"] if host.endswith(".test") else ["127.0.0.1"])
+
+
+@pytest.fixture
+def database_url():
+    if not PG_ADMIN_URL:
+        yield ":memory:"
+        return
+    import psycopg
+    from urllib.parse import urlsplit, urlunsplit
+    name = f"ingly_t_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(PG_ADMIN_URL, autocommit=True) as c:
+        c.execute(f"CREATE DATABASE {name}")
+    u = urlsplit(PG_ADMIN_URL)
+    yield urlunsplit((u.scheme, u.netloc, f"/{name}", u.query, ""))
+    with psycopg.connect(PG_ADMIN_URL, autocommit=True) as c:
+        c.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
 
 
 class FakeProvider:
@@ -67,9 +90,9 @@ def site_transport(pages: dict[str, tuple[int, str, str]], log: list | None = No
 
 
 @pytest.fixture
-def settings(tmp_path):
+def settings(database_url):
     s = Settings()
-    s.database_path = ":memory:"
+    s.database_path = database_url
     s.token_encryption_key = generate_encryption_key()
     s.ai_provider = "none"
     s.crawler_delay_s = 0
@@ -87,12 +110,12 @@ def fake_ai():
 
 @pytest.fixture
 def svc(settings, fake_ai):
-    return build_services(settings, ai_provider=fake_ai)
+    return build_services(settings, ai_provider=fake_ai, guard=PUBLIC_GUARD)
 
 
 @pytest.fixture
 def svc_noai(settings):
-    return build_services(settings)
+    return build_services(settings, guard=PUBLIC_GUARD)
 
 
 def official_source_id(svc, key="xtool_support"):
@@ -106,8 +129,8 @@ def seeded_kb(svc):
     sid = official_source_id(svc)
     svc.catalog.upsert_product({"key": "test-laser-a", "official_name": "Test Laser A", "aliases": ["laser a"],
                                 "status": "to_verify"})
-    import_file(svc.db, sid, "a.html", (FIXTURES / "product_a.html").read_bytes(), "https://support.example.test/a")
-    import_file(svc.db, sid, "b.html", (FIXTURES / "guide_b.html").read_bytes(), "https://support.example.test/b")
+    import_file(svc.db, sid, "a.html", (FIXTURES / "product_a.html").read_bytes(), "https://support.example.test/a", store=svc.kb)
+    import_file(svc.db, sid, "b.html", (FIXTURES / "guide_b.html").read_bytes(), "https://support.example.test/b", store=svc.kb)
     return svc
 
 

@@ -25,7 +25,8 @@ def _env_float(name: str, default: float) -> float:
 
 @dataclass
 class Settings:
-    database_path: str = field(default_factory=lambda: _env("INGLY_DATABASE_PATH", str(ROOT / "data" / "ingly.db")))
+    # postgresql://utente:password@host:5432/db (produzione) oppure percorso di un file SQLite (sviluppo)
+    database_path: str = field(default_factory=lambda: _env("INGLY_DATABASE_URL") or _env("INGLY_DATABASE_PATH", str(ROOT / "data" / "ingly.db")))
     secret_key: str | None = field(default_factory=lambda: _env("INGLY_SECRET_KEY"))
     # Chiave Fernet (base64 urlsafe, 32 byte) per cifrare i token OAuth a riposo.
     token_encryption_key: str | None = field(default_factory=lambda: _env("INGLY_TOKEN_ENCRYPTION_KEY"))
@@ -38,6 +39,10 @@ class Settings:
     ai_base_url: str | None = field(default_factory=lambda: _env("INGLY_AI_BASE_URL"))
     ai_timeout_s: float = field(default_factory=lambda: _env_float("INGLY_AI_TIMEOUT_S", 60.0))
     ai_max_retries: int = field(default_factory=lambda: _env_int("INGLY_AI_MAX_RETRIES", 3))
+
+    embeddings_provider: str = field(default_factory=lambda: _env("INGLY_EMBEDDINGS_PROVIDER", "hashing"))  # hashing | voyage
+    embeddings_model: str | None = field(default_factory=lambda: _env("INGLY_EMBEDDINGS_MODEL"))
+    embeddings_api_key: str | None = field(default_factory=lambda: _env("INGLY_EMBEDDINGS_API_KEY"))
 
     meta_app_id: str | None = field(default_factory=lambda: _env("META_APP_ID"))
     meta_app_secret: str | None = field(default_factory=lambda: _env("META_APP_SECRET"))

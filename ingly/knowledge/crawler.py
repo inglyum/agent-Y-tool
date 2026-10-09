@@ -17,6 +17,7 @@ from ..audit import audit, log
 from ..config import Settings
 from ..db import Database, jload, now_iso
 from .extract import extract_html, extract_pdf
+from .netguard import BlockedURL, NetGuard
 from .store import KnowledgeStore
 
 STOP_STATUSES = {401, 403, 429}
@@ -38,13 +39,14 @@ class CrawlReport:
 
 
 class Crawler:
-    def __init__(self, db: Database, settings: Settings, client: httpx.Client | None = None,
-                 sleep=time.sleep):
+    def __init__(self, db: Database, settings: Settings, transport: httpx.BaseTransport | None = None,
+                 sleep=time.sleep, store: KnowledgeStore | None = None, guard: NetGuard | None = None):
         self.db = db
         self.settings = settings
-        self.store = KnowledgeStore(db)
-        self.client = client or httpx.Client(timeout=30, follow_redirects=True,
-                                             headers={"User-Agent": settings.crawler_user_agent})
+        self.store = store or KnowledgeStore(db)
+        self.guard = guard or NetGuard()
+        # ogni richiesta (redirect compresi) passa dal controllo SSRF
+        self.client = self.guard.client(settings.crawler_user_agent, transport)
         self.sleep = sleep
         self._robots: dict[str, RobotFileParser | None] = {}
 
@@ -63,7 +65,7 @@ class Crawler:
                     rp.parse([])  # nessun robots: tutto consentito
                 else:
                     rp = None
-            except httpx.HTTPError:
+            except (httpx.HTTPError, BlockedURL):
                 rp = None
             self._robots[origin] = rp
         return self._robots[origin]
@@ -80,7 +82,7 @@ class Crawler:
             r = self.client.get(f"{origin}/robots.txt")
             if r.status_code == 200:
                 found = [l.split(":", 1)[1].strip() for l in r.text.splitlines() if l.lower().startswith("sitemap:")]
-        except httpx.HTTPError:
+        except (httpx.HTTPError, BlockedURL):
             pass
         return found or [f"{origin}/sitemap.xml"]
 
@@ -92,7 +94,7 @@ class Crawler:
             if r.status_code != 200:
                 return []
             root = ET.fromstring(r.content)
-        except (httpx.HTTPError, ET.ParseError):
+        except (httpx.HTTPError, ET.ParseError, BlockedURL):
             return []
         ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         if root.tag.endswith("sitemapindex"):
@@ -155,6 +157,34 @@ class Crawler:
         audit(self.db, "job:crawl", "kb.crawl", "source", source_id, rep.__dict__)
         return rep
 
+    def source_for_url(self, url: str) -> dict | None:
+        """Una URL è acquisibile solo se appartiene al dominio di una fonte registrata."""
+        host = (urlparse(url).hostname or "").lower()
+        for src in self.db.all("SELECT * FROM sources WHERE base_url IS NOT NULL AND kind NOT IN ('community','official_community')"):
+            if (urlparse(src["base_url"]).hostname or "").lower() == host:
+                return src
+        return None
+
+    def fetch_url(self, url: str) -> dict:
+        """Acquisisce una singola pagina o PDF pubblico di una fonte consentita."""
+        self.guard.check(url)
+        src = self.source_for_url(url)
+        if not src:
+            raise BlockedURL("Dominio non registrato tra le fonti consentite")
+        if not self.allowed(url):
+            raise BlockedURL("robots.txt non consente l'accesso o non è leggibile")
+        job_id = self.db.run("INSERT INTO crawl_jobs (source_id,started_at,status) VALUES (?,?,'running')", (src["id"], now_iso()))
+        rep = CrawlReport(job_id, seen=1)
+        self._fetch_one(src, url, rep)
+        status = "failed" if (rep.stopped_reason or rep.errors) else "done"
+        self.db.run("""UPDATE crawl_jobs SET finished_at=?, status=?, pages_seen=1, pages_changed=?, pages_gone=?, error=?
+                       WHERE id=?""", (now_iso(), status, rep.new + rep.changed, rep.gone,
+                                       rep.stopped_reason or "; ".join(rep.errors) or None, job_id))
+        row = self.db.one("SELECT outcome, detail FROM crawl_results WHERE crawl_job_id=? ORDER BY id DESC LIMIT 1", (job_id,))
+        doc = self.db.one("SELECT id, title FROM documents WHERE url=?", (url,))
+        return {"outcome": row["outcome"] if row else "error", "detail": row["detail"] if row else None,
+                "document_id": doc["id"] if doc else None, "title": doc["title"] if doc else None, "source": src["key"]}
+
     def _result(self, job_id, url, outcome, status, detail=None):
         self.db.run("INSERT INTO crawl_results (crawl_job_id,url,outcome,http_status,detail,at) VALUES (?,?,?,?,?,?)",
                     (job_id, url, outcome, status, detail, now_iso()))
@@ -168,6 +198,10 @@ class Crawler:
             headers["If-Modified-Since"] = prev["last_modified"]
         try:
             r = self.client.get(url, headers=headers)
+        except BlockedURL as e:
+            rep.errors.append(f"{url}: {e}")
+            self._result(rep.job_id, url, "blocked", None, str(e))
+            return []
         except httpx.HTTPError as e:
             rep.errors.append(f"{url}: {e}")
             self._result(rep.job_id, url, "error", None, str(e))
@@ -217,9 +251,10 @@ class Crawler:
         return links
 
 
-def import_file(db: Database, source_id: int, filename: str, data: bytes, url: str | None = None) -> dict:
+def import_file(db: Database, source_id: int, filename: str, data: bytes, url: str | None = None,
+                store: KnowledgeStore | None = None) -> dict:
     """Import manuale di un PDF o HTML (es. manuale scaricato dal Support Center)."""
-    store = KnowledgeStore(db)
+    store = store or KnowledgeStore(db)
     ref = url or f"upload://{filename}"
     if filename.lower().endswith(".pdf") or data[:4] == b"%PDF":
         ex, ctype = extract_pdf(data, ref), "application/pdf"

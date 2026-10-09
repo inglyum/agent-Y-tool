@@ -100,7 +100,7 @@ class CRM:
         l["score_explanation"] = jload(l["score_explanation"], [])
         l["materials"] = jload(l["materials"], [])
         l["events"] = self.db.all("SELECT * FROM lead_events WHERE lead_id=? ORDER BY at DESC", (lead_id,))
-        l["consents"] = self.db.all("SELECT * FROM consent_records WHERE lead_id=? ORDER BY at DESC", (lead_id,))
+        l["consents"] = self.db.all("SELECT * FROM consents WHERE lead_id=? ORDER BY at DESC", (lead_id,))
         return l
 
     def move(self, lead_id: int, stage: str, user_id: int | None = None, note: str | None = None) -> None:
@@ -143,7 +143,7 @@ class CRM:
         if (email or phone) and not (granted and purpose == "contact"):
             raise ValueError("Recapiti salvabili solo con consenso al contatto")
         with self.db.tx() as c:
-            c.execute("INSERT INTO consent_records (lead_id,purpose,granted,channel,legal_basis,evidence,at) VALUES (?,?,?,?,?,?,?)",
+            c.execute("INSERT INTO consents (lead_id,purpose,granted,channel,legal_basis,evidence,at) VALUES (?,?,?,?,?,?,?)",
                       (lead_id, purpose, int(granted), channel, legal_basis, evidence, now_iso()))
             if purpose == "contact":
                 if granted:
@@ -155,7 +155,7 @@ class CRM:
                   {"purpose": purpose, "granted": granted, "basis": legal_basis}, user_id)
 
     def can_contact(self, lead_id: int, purpose: str = "contact") -> bool:
-        r = self.db.one("SELECT granted FROM consent_records WHERE lead_id=? AND purpose=? ORDER BY id DESC LIMIT 1",
+        r = self.db.one("SELECT granted FROM consents WHERE lead_id=? AND purpose=? ORDER BY id DESC LIMIT 1",
                         (lead_id, purpose))
         return bool(r and r["granted"])
 
