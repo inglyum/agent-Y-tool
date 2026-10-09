@@ -1,0 +1,29 @@
+{
+  "name": "ingly-generator-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "INGLY GENERATOR LAB PRO — suite di generatori parametrici per laser, CNC e stampa",
+  "type": "module",
+  "scripts": {
+    "fonts": "node scripts/gen-fonts.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node scripts/gen-fonts.mjs && node --test tests/*.test.ts",
+    "build": "node scripts/gen-fonts.mjs && node scripts/build.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "release": "npm run typecheck && npm test && npm run build && node scripts/e2e.mjs --covers",
+    "serve": "node scripts/serve.mjs"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@fontsource/great-vibes": "^5.1.0",
+    "@fontsource/montserrat": "^5.1.0",
+    "@fontsource/oswald": "^5.1.0",
+    "@fontsource/playfair-display": "^5.1.0",
+    "@types/node": "^22.7.5",
+    "@types/opentype.js": "^1.3.8",
+    "esbuild": "^0.23.1",
+    "opentype.js": "^1.3.4",
+    "playwright-core": "^1.55.1",
+    "typescript": "^5.6.3"
+  }
+}

@@ -47,5 +47,6 @@ finché non lo decidi tu.
 - `tests/` — test automatici; `evals/` — casi di valutazione
 - `AGENT.md` — regole operative dell'agente (fonti, gerarchia, "non inventare", flusso utente → post-vendita)
 - `knowledge/` — registro delle fonti ufficiali e schede YAML (modelli; importabili con `python -m ingly import-yaml`)
+- `generator-lab/` — **INGLY Generator Lab PRO**: generatori parametrici per laser/CNC/stampa e pacchetti pronti per Atomm (vedi [generator-lab/README.md](generator-lab/README.md))
 - `app/radar-clienti.html` — Radar Clienti: analisi rapida di screenshot di messaggi (pubblicato su https://claude.ai/artifact/NBqETpLaA2gyTs3fDjHfTn)
 - `scripts/valida_kb.py` — controllo delle schede YAML (fonte e data di verifica)

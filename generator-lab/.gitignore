@@ -1,0 +1,3 @@
+node_modules/
+src/fonts/font-data.gen.ts
+.tmp/
