@@ -1,0 +1,15 @@
+services:
+  web:
+    build: .
+    env_file: .env
+    volumes: ["ingly-data:/data"]
+    ports: ["127.0.0.1:8000:8000"]   # esporre solo dietro un reverse proxy HTTPS
+    restart: unless-stopped
+  worker:
+    build: .
+    env_file: .env
+    volumes: ["ingly-data:/data"]
+    command: ["python", "-m", "ingly", "worker"]
+    restart: unless-stopped
+volumes:
+  ingly-data:
