@@ -1,6 +1,7 @@
 // app-shell + ui-components: layout, dashboard, canvas con zoom/pan, pannello parametri, azioni.
 // La shell non contiene logica geometrica: chiama generator.run() e mostra il risultato.
 import { connectAtomm } from '../core/atomm.ts';
+import { applyProfile, SOFTWARE_PROFILES, type SoftwareProfile } from '../core/compat.ts';
 import { downloadFile, jsonFile, safeFilename } from '../core/export.ts';
 import { History, hasErrors, sanitizeImported } from '../core/params.ts';
 import type { ExportFile, FileInput, GeneratorDef, GeneratorResult, Issue, ParamDef, Params, RunContext, View } from '../core/types.ts';
@@ -33,6 +34,24 @@ function store<T>(key: string, value?: T): T | null {
     /* archiviazione locale non disponibile (finestra privata, iframe) */
   }
   return null;
+}
+
+function currentProfile(): SoftwareProfile {
+  const v = store<string>('ingly.profile');
+  return (SOFTWARE_PROFILES.some((p) => p.value === v) ? v : 'universal') as SoftwareProfile;
+}
+
+/** Notifica breve in basso a destra (role=status per i lettori di schermo). */
+function toast(text: string): void {
+  let host = document.querySelector<HTMLElement>('.toasts');
+  if (!host) {
+    host = el('div', { class: 'toasts', role: 'status', 'aria-live': 'polite' });
+    document.body.append(host);
+  }
+  const t = el('div', { class: 'toast', text });
+  host.append(t);
+  setTimeout(() => t.classList.add('out'), 3200);
+  setTimeout(() => t.remove(), 3700);
 }
 
 // ---------- Tema ----------
@@ -249,11 +268,11 @@ function buildForm(gen: GeneratorDef, getParams: () => Params, onInput: (key: st
   const root = el('form', { class: 'params', novalidate: '' });
   root.addEventListener('submit', (e) => e.preventDefault());
   const groups = new Map<string, HTMLElement>();
-  const rows = new Map<string, { row: HTMLElement; input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; def: ParamDef; msg: HTMLElement }>();
+  const rows = new Map<string, { row: HTMLElement; input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; def: ParamDef; msg: HTMLElement; range: HTMLInputElement | null }>();
   for (const def of gen.params) {
     let g = groups.get(def.group);
     if (!g) {
-      g = el('fieldset', { class: 'group' }, el('legend', { text: def.group }));
+      g = el('details', { class: 'group', open: '' }, el('summary', {}, el('span', { text: def.group }), el('span', { class: 'chev', 'aria-hidden': 'true', text: '▾' })));
       groups.set(def.group, g);
       root.append(g);
     }
@@ -266,7 +285,7 @@ function buildForm(gen: GeneratorDef, getParams: () => Params, onInput: (key: st
     } else if (def.type === 'bool') {
       input = el('input', { id, type: 'checkbox' });
     } else if (def.type === 'file') {
-      input = el('input', { id, type: 'file', accept: def.accept ?? '' });
+      input = el('input', { id, type: 'file', accept: def.accept ?? '', class: 'sr-only' });
     } else {
       input = el('input', { id, type: def.type === 'number' ? 'text' : 'text', inputmode: def.type === 'number' ? 'decimal' : 'text', autocomplete: 'off' });
       if (def.maxLength) input.setAttribute('maxlength', String(def.maxLength));
@@ -296,14 +315,46 @@ function buildForm(gen: GeneratorDef, getParams: () => Params, onInput: (key: st
       control.prepend(stepper(-1));
       control.append(stepper(1));
     }
+    let range: HTMLInputElement | null = null;
+    if (def.type === 'number' && def.min !== undefined && def.max !== undefined && (def.max - def.min) / (def.step ?? 1) <= 20000) {
+      range = el('input', { type: 'range', class: 'slider', min: String(def.min), max: String(def.max), step: String(def.step ?? 1), tabindex: '-1', 'aria-hidden': 'true' });
+      const r = range;
+      r.addEventListener('input', () => {
+        input.value = r.value;
+        onInput(def.key, Number(r.value), false);
+      });
+      r.addEventListener('change', () => onInput(def.key, Number(r.value), true));
+    }
     const row = el('div', { class: `field type-${def.type}` });
-    if (def.type === 'bool') row.append(el('div', { class: 'control check' }, input, label));
-    else row.append(label, control);
+    if (def.type === 'bool') row.append(el('label', { class: 'switch', for: id }, input, el('span', { class: 'track', 'aria-hidden': 'true' }), el('span', { class: 'switch-label', text: def.label })));
+    else if (def.type === 'file') {
+      const name = el('span', { class: 'drop-name', text: 'Nessun file selezionato' });
+      const zone = el('label', { class: 'dropzone', for: id },
+        el('span', { class: 'drop-icon', 'aria-hidden': 'true', text: '⬆' }),
+        el('span', { class: 'drop-title', text: 'Trascina qui l\'immagine' }),
+        el('span', { class: 'drop-sub', text: 'oppure clicca per sceglierla · PNG, JPG, WebP' }), name, input);
+      zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('over');
+        const f = e.dataTransfer?.files?.[0];
+        if (f) { name.textContent = `${f.name} · ${fileSize(f.size)}`; zone.classList.add('has-file'); onFile(def.key, f); }
+      });
+      input.addEventListener('change', () => {
+        const f = (input as HTMLInputElement).files?.[0];
+        if (f) { name.textContent = `${f.name} · ${fileSize(f.size)}`; zone.classList.add('has-file'); }
+      });
+      row.append(el('span', { class: 'field-label', text: def.label }), zone);
+    } else {
+      row.append(label, control);
+      if (range) row.append(range);
+    }
     if (help) row.append(help);
     row.append(msg);
     input.setAttribute('aria-describedby', `${id}-msg`);
     g.append(row);
-    rows.set(def.key, { row, input, def, msg });
+    rows.set(def.key, { row, input, def, msg, range });
 
     const read = (): Params[string] => {
       if (def.type === 'bool') return (input as HTMLInputElement).checked;
@@ -339,8 +390,9 @@ function buildForm(gen: GeneratorDef, getParams: () => Params, onInput: (key: st
     root,
     rebuildOptions: fillOptions,
     setValues(p) {
-      for (const { def, input, row } of rows.values()) {
+      for (const { def, input, row, range } of rows.values()) {
         const v = p[def.key];
+        if (range && typeof v === 'number' && document.activeElement !== range) range.value = String(v);
         if (def.type === 'bool') (input as HTMLInputElement).checked = v === true;
         else if (def.type === 'file') {
           /* il file resta selezionato */
@@ -371,6 +423,10 @@ function buildForm(gen: GeneratorDef, getParams: () => Params, onInput: (key: st
       r.input.focus();
     },
   };
+}
+
+function fileSize(b: number): string {
+  return b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
 async function decodeImage(file: File): Promise<FileInput> {
@@ -414,7 +470,15 @@ function createWorkspace(gen: GeneratorDef, setStatus: (s: Status, msg: string) 
   const viewTabs = el('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Viste' });
   const presetBox = el('div', { class: 'presets' });
   const exportSelect = el('select', { class: 'export-select', 'aria-label': 'Formato di esportazione' });
-  const exportBtn = el('button', { class: 'btn primary', type: 'button', text: 'Esporta' });
+  const exportBtn = el('button', { class: 'btn primary', type: 'button', text: '⬇ Esporta' });
+  const profileSelect = el('select', { class: 'profile-select', 'aria-label': 'Software di destinazione', title: 'Adatta il file al software che userai' });
+  for (const sp of SOFTWARE_PROFILES) profileSelect.append(el('option', { value: sp.value, text: sp.label }));
+  profileSelect.value = currentProfile();
+  profileSelect.addEventListener('change', () => {
+    store('ingly.profile', profileSelect.value);
+    profileHint.textContent = SOFTWARE_PROFILES.find((x) => x.value === profileSelect.value)?.hint ?? '';
+  });
+  const profileHint = el('p', { class: 'muted small profile-hint', text: SOFTWARE_PROFILES.find((x) => x.value === profileSelect.value)?.hint ?? '' });
   const exportHint = el('span', { class: 'export-hint' });
   const undoBtn = el('button', { class: 'btn', type: 'button', title: 'Annulla (Ctrl+Z)', text: '↶ Annulla' });
   const redoBtn = el('button', { class: 'btn', type: 'button', title: 'Ripristina (Ctrl+Shift+Z)', text: '↷ Ripristina' });
@@ -514,7 +578,8 @@ function createWorkspace(gen: GeneratorDef, setStatus: (s: Status, msg: string) 
       issuesBox.append(item);
     }
     // statistiche
-    statsBox.replaceChildren(...result.stats.flatMap((s) => [el('dt', { text: s.label }), el('dd', { text: s.value })]));
+    statsBox.parentElement!.hidden = !result.stats.length;
+    statsBox.replaceChildren(...result.stats.map((s) => el('div', { class: 'stat' }, el('dt', { text: s.label }), el('dd', { text: s.value }))));
     // esportazioni
     const prev = exportSelect.value;
     exportSelect.replaceChildren(...result.exports.map((x) => el('option', { value: x.id, text: x.label })));
@@ -540,9 +605,10 @@ function createWorkspace(gen: GeneratorDef, setStatus: (s: Status, msg: string) 
     exportBtn.disabled = true;
     setStatus('processing', 'Esportazione…');
     try {
-      const f = await opt.build();
+      const f = await applyProfile(await opt.build(), profileSelect.value as SoftwareProfile);
       downloadFile(f);
       setStatus('done', `File esportato: ${f.filename}`);
+      toast(`✓ ${f.filename} pronto per ${profileSelect.selectedOptions[0]?.textContent ?? ''}`);
     } catch (e) {
       setStatus('error', `Esportazione non riuscita: ${(e as Error).message}`);
     } finally {
@@ -594,9 +660,15 @@ function createWorkspace(gen: GeneratorDef, setStatus: (s: Status, msg: string) 
     schedule(0);
   });
 
+  const guide = el('details', { class: 'block quick', open: '' }, el('summary', { text: 'Come si usa' }),
+    el('ol', {}, el('li', { text: 'Scegli un modello rapido o imposta i parametri a destra.' }),
+      el('li', { text: 'Guarda «Controlli»: verde = file pronto per la produzione.' }),
+      el('li', { text: 'Scegli il software (xTool, LightBurn, Cricut…) ed esporta.' })));
   const left = el('aside', { class: 'panel left', 'aria-label': 'Strumenti' },
+    guide,
     presetBox,
     el('div', { class: 'block' }, el('h3', { text: 'Risultato' }), statsBox),
+    el('div', { class: 'block' }, el('h3', { text: 'Software di destinazione' }), profileHint),
     el('div', { class: 'block' }, el('h3', { text: 'Progetto' }), el('div', { class: 'row-actions' }, saveProject, openProject, projectInput),
       el('p', { class: 'muted small', text: 'I parametri restano anche in questo browser. Il file di progetto serve per backup e per riaprirli altrove.' })),
   );
@@ -605,7 +677,7 @@ function createWorkspace(gen: GeneratorDef, setStatus: (s: Status, msg: string) 
   const center = el('div', { class: 'center' }, viewTabs, stage.root, el('div', { class: 'block issues-wrap' }, el('h3', { text: 'Controlli' }), issuesBox));
   const actions = el('div', { class: 'actionbar', role: 'toolbar', 'aria-label': 'Azioni' },
     el('div', { class: 'group-btns' }, undoBtn, redoBtn, resetBtn),
-    el('div', { class: 'export' }, exportHint, exportSelect, exportBtn));
+    el('div', { class: 'export' }, exportHint, profileSelect, exportSelect, exportBtn));
   const root = el('div', { class: 'workspace' }, actions, el('div', { class: 'cols' }, left, center, right));
 
   root.addEventListener('keydown', (e) => {
@@ -635,7 +707,8 @@ function createWorkspace(gen: GeneratorDef, setStatus: (s: Status, msg: string) 
       if (errs.length) throw new Error(`Correggi prima: ${errs.map((e) => e.message).join(' ')}`);
       const opt = r.exports.find((x) => x.primary) ?? r.exports[0];
       if (!opt) throw new Error('Nessun file esportabile.');
-      return opt.build();
+      // Atomm apre i file nell'ecosistema xTool: SVG in mm senza guide
+      return applyProfile(await opt.build(), 'xtool');
     },
   };
 }

@@ -2,52 +2,69 @@
 
 App Atomm: **print-and-cut**
 
-## Step 2 · Dettagli dell'annuncio
+## Dettagli dell'annuncio
+**Immagine di copertina:** `2-IMMAGINI/cover.png` (4:3) — immagine aggiuntiva facoltativa: `2-IMMAGINI/screenshot-app.png`
 
-**Immagine di copertina:** `cover.png` (in questa cartella, formato 4:3)
-
-**Titolo della carta:**
+**Titolo della carta**
 ```
 INGLY Print & Cut
 ```
 
-**Breve descrizione:**
+**Breve descrizione**
 ```
-Adesivi e sagomati: sfondo rimosso in automatico, contorno di taglio, abbondanza e crocini.
+Adesivi e sagomati: sfondo rimosso in automatico, contorno di taglio, abbondanza e crocini su foglio pronto.
 ```
 
-**Descrizione dettagliata:**
+**Descrizione dettagliata**
 ```
-Trasforma un'immagine in adesivi, magneti e sagomati pronti da stampare e tagliare.
+Da un'immagine a un foglio di adesivi pronto da stampare e tagliare, in un minuto.
 
+✦ COSA FA
 • Rimuove lo sfondo in automatico: resta solo il soggetto (personaggio, logo, disegno), anche su sfondi sfumati
-• Opzioni per togliere lo sfondo chiuso nel soggetto e tenere solo il soggetto principale; esporta anche il PNG scontornato
-• Contorno di taglio a distanza costante, con arrotondamento che elimina rientranze impossibili da tagliare
-• Bordo del colore del materiale oppure colori estesi fino al taglio, con abbondanza configurabile
+• Opzioni per togliere lo sfondo chiuso nel soggetto e tenere solo il soggetto principale
+• Contorno di taglio a distanza costante, arrotondato per un taglio pulito
+• Bordo del colore del materiale oppure colori estesi fino al taglio, con abbondanza
 • Foglio con più copie disposte automaticamente (A4 o misura libera)
 • Crocini di registrazione a 3 o 4 angoli, identici nel file di stampa e in quello di taglio
-• File di STAMPA (PNG con DPI e SVG) e file di TAGLIO (SVG in mm) perfettamente allineati
-• Lunghezza di taglio e numero di copie calcolati
+• File di STAMPA (PNG con DPI e SVG) e di TAGLIO (SVG o DXF in mm) perfettamente allineati
+• PNG scontornato con sfondo trasparente (ideale per Cricut «Stampa e taglia»)
 • L'immagine resta sul tuo dispositivo
+
+✦ COMPATIBILE CON
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator
+
+✦ COME SI USA
+1. Trascina l'immagine: lo sfondo sparisce da solo
+2. Regola distanza del taglio, copie e foglio
+3. Stampa il file STAMPA al 100%, poi taglia con il file TAGLIO
+
+✦ PERFETTO PER
+Adesivi, etichette per prodotti, magneti, segnalibri, gadget e bomboniere.
 ```
 
 **Mestiere da selezionare:** Stampa → Taglio di coltello · Stampa → Stampa UV · Stampa → Stampa a inchiostro · Laser → Taglio
 
-## Step 3 · Artefatto di codice
+**Parole chiave:** adesivi, sticker, print and cut, stampa e taglia, sagomato, magneti, rimozione sfondo, cricut, contorno, etichette
 
-Carica il file `print-and-cut.html` (in questa cartella).
+## Artefatto di codice
+Carica `1-CODICE-da-caricare/print-and-cut.html`.
+
+## Compatibilità
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator · Cricut «Stampa e taglia» (PNG scontornato)
 
 ---
 
-### English version (optional)
-
+### English
 **Title:** INGLY Print & Cut Sticker Maker
 
-**Short description:** Stickers and die-cut shapes: automatic cut contour, bleed and registration marks on a ready sheet.
+**Short description:** Stickers and die-cut shapes: automatic background removal, cut contour, bleed and registration marks.
 
 **Detailed description:**
 ```
-Turn an image into print-then-cut stickers, magnets and shapes: automatic background removal (keeps only the subject,
-works on gradient backgrounds), constant-offset cut contour with smoothing, optional colour bleed, multi-copy sheet layout, 3- or
-4-corner registration marks, aligned PRINT (PNG with DPI / SVG) and CUT (SVG in mm) files. Runs locally.
+From an image to a sheet of print-then-cut stickers in a minute: automatic background removal (even on gradient
+backgrounds), constant-offset smoothed cut contour, optional colour bleed, multi-copy sheet, 3- or 4-corner registration
+marks, aligned PRINT (PNG with DPI / SVG) and CUT (SVG / DXF in mm) files, transparent cut-out PNG for Cricut Print Then Cut.
+
+✦ WORKS WITH
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator
 ```

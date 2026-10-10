@@ -2,51 +2,65 @@
 
 App Atomm: **image-prep**
 
-## Step 2 · Dettagli dell'annuncio
+## Dettagli dell'annuncio
+**Immagine di copertina:** `2-IMMAGINI/cover.png` (4:3) — immagine aggiuntiva facoltativa: `2-IMMAGINI/screenshot-app.png`
 
-**Immagine di copertina:** `cover.png` (in questa cartella, formato 4:3)
-
-**Titolo della carta:**
+**Titolo della carta**
 ```
 INGLY Image Prep
 ```
 
-**Breve descrizione:**
+**Breve descrizione**
 ```
-Prepara foto e loghi per incisione: dithering, soglia e retino in mm e DPI.
+Prepara foto e loghi per l'incisione laser: dithering, soglia e retino in mm e DPI, tutto in locale.
 ```
 
-**Descrizione dettagliata:**
+**Descrizione dettagliata**
 ```
-Prepara le immagini per incisione laser e stampa, direttamente nel browser.
+Trasforma una foto in un file pronto per l'incisione laser, direttamente nel browser.
 
+✦ COSA FA
 • L'immagine resta sul tuo dispositivo: nessun caricamento su server
-• Dimensione finale in millimetri e risoluzione in DPI
-• Luminosità, contrasto, gamma, negativo
-• Scala di grigi, soglia, dithering Floyd–Steinberg, Atkinson, Bayer 4×4 e 8×8, retino a punti con lineatura e angolo
+• Misura finale in millimetri e risoluzione in DPI
+• Luminosità, contrasto, gamma e negativo (per ardesia e materiali scuri)
+• Scala di grigi, soglia, dithering Floyd–Steinberg, Atkinson, Bayer, retino a punti
 • Anteprima prima/dopo
-• PNG con DPI scritti nel file: si apre già alla misura giusta
+• PNG con i DPI scritti nel file: si apre già alla misura giusta
 
-I filtri preparano l'immagine: velocità e potenza vanno sempre provate sul tuo materiale.
+✦ COMPATIBILE CON
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · qualsiasi software di stampa
+
+✦ COME SI USA
+1. Trascina la foto
+2. Scegli un modello (legno, ardesia, logo, retino) e regola il contrasto
+3. Esporta il PNG e incidi in modalità immagine
+
+Nota: velocità e potenza vanno sempre provate sul tuo materiale.
 ```
 
 **Mestiere da selezionare:** Laser → Incisione · Stampa → Stampa UV
 
-## Step 3 · Artefatto di codice
+**Parole chiave:** foto, incisione foto, dithering, ardesia, legno, ritratto, retino, dpi, laser, immagine
 
-Carica il file `image-prep.html` (in questa cartella).
+## Artefatto di codice
+Carica `1-CODICE-da-caricare/image-prep.html`.
+
+## Compatibilità
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · qualsiasi software di stampa (PNG con DPI)
 
 ---
 
-### English version (optional)
-
+### English
 **Title:** INGLY Photo Engraving Prep
 
-**Short description:** Prepare photos and logos for engraving: dithering, threshold and halftone in mm and DPI.
+**Short description:** Prepare photos and logos for laser engraving: dithering, threshold and halftone in mm and DPI, fully local.
 
 **Detailed description:**
 ```
-Prepare images for laser engraving and printing, locally in your browser: size in mm and DPI,
-brightness / contrast / gamma / invert, grayscale, threshold, Floyd–Steinberg, Atkinson, Bayer and halftone,
-before/after preview and PNG export with embedded DPI.
+Turn a photo into a laser-engraving-ready image, locally in your browser: size in mm and DPI, brightness /
+contrast / gamma / invert, grayscale, threshold, Floyd–Steinberg, Atkinson, Bayer, halftone, before/after preview,
+PNG with embedded DPI.
+
+✦ WORKS WITH
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · any print software
 ```

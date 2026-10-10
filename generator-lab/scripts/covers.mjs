@@ -40,7 +40,7 @@ h1{font-weight:800;font-size:124px;line-height:.98;letter-spacing:-.03em;margin-
 <div class="brand"><div class="logo">IG</div><div>INGLY DESIGN<small>GENERATOR LAB PRO</small></div></div>
 <div class="text"><div id="code"></div><h1><span id="t1"></span><br><span id="t2"></span></h1><p id="tagline"></p><div id="chips"></div></div>
 <div id="visual"></div>
-<div class="foot"><b>●</b> Generatore parametrico · file pronti per laser e stampa</div>
+<div class="foot"><b>●</b> Compatibile con xTool · LightBurn · Glowforge · Cricut · Silhouette</div>
 <script>${js.replace(/<\/script/gi, '<\\/script')}</script></body></html>`;
 
 const tmp = join(root, '.tmp-cover');

@@ -2,51 +2,65 @@
 
 App Atomm: **batch-nesting**
 
-## Step 2 · Dettagli dell'annuncio
+## Dettagli dell'annuncio
+**Immagine di copertina:** `2-IMMAGINI/cover.png` (4:3) — immagine aggiuntiva facoltativa: `2-IMMAGINI/screenshot-app.png`
 
-**Immagine di copertina:** `cover.png` (in questa cartella, formato 4:3)
-
-**Titolo della carta:**
+**Titolo della carta**
 ```
 INGLY Batch & Nesting
 ```
 
-**Breve descrizione:**
+**Breve descrizione**
 ```
-Disponi lotti di pezzi sulle lastre: utilizzo, sfrido e pezzi non collocabili.
+Disponi lotti di pezzi sulle lastre e risparmia materiale: utilizzo, sfrido e report di produzione.
 ```
 
-**Descrizione dettagliata:**
+**Descrizione dettagliata**
 ```
-Pianifica la produzione in serie sulle tue lastre.
+Pianifica la produzione in serie: quanti pezzi entrano nella lastra e quanto materiale risparmi.
 
+✦ COSA FA
 • Elenco pezzi con nome, misure, quantità e rotazione ammessa
-• Moltiplicatore di lotto, margini della lastra, distanza minima e kerf
-• Algoritmo MaxRects (Best Short Side Fit) deterministico: stesso input, stesso risultato
+• Numero di lotti, margini della lastra, distanza minima e kerf
+• Disposizione automatica deterministica (algoritmo MaxRects): stesso input, stesso risultato
 • Verifica indipendente di sovrapposizioni e margini
-• Pezzi collocati, superficie usata e residua, percentuale di utilizzo, pezzi non collocabili
-• Esportazione SVG per lastra + report CSV con le coordinate
+• Pezzi collocati, superficie usata e residua, percentuale di utilizzo, pezzi che non entrano
+• Un file per lastra + report CSV con le coordinate di ogni pezzo
 
-Lavora sui rettangoli d'ingombro dei pezzi.
+✦ COMPATIBILE CON
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator · Excel / Google Sheets (report CSV)
+
+✦ COME SI USA
+1. Incolla l'elenco dei pezzi (nome; larghezza; altezza; quantità)
+2. Imposta lastra, margini e kerf
+3. Esporta le lastre e il report
+
+✦ PERFETTO PER
+Laboratori, produzione di gadget e bomboniere, ordini B2B, stampa UV su più pezzi.
 ```
 
 **Mestiere da selezionare:** Laser → Taglio · Laser → Incisione · Stampa → Stampa UV
 
-## Step 3 · Artefatto di codice
+**Parole chiave:** nesting, produzione, lotto, lastra, sfrido, ottimizzazione, serie, taglio laser, stampa uv, risparmio
 
-Carica il file `batch-nesting.html` (in questa cartella).
+## Artefatto di codice
+Carica `1-CODICE-da-caricare/batch-nesting.html`.
+
+## Compatibilità
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator
 
 ---
 
-### English version (optional)
-
+### English
 **Title:** INGLY Sheet Nesting
 
-**Short description:** Nest batches of parts on sheets: utilisation, waste and unplaced parts.
+**Short description:** Nest batches of parts on your sheets and save material: utilisation, waste and production report.
 
 **Detailed description:**
 ```
-Plan batch production on your sheets with a deterministic MaxRects nesting algorithm:
-quantities, lot multiplier, margins, spacing, kerf and allowed rotation. Independent overlap/margin check,
-utilisation statistics, unplaced parts, SVG per sheet and a CSV coordinate report. Works on bounding rectangles.
+Plan batch production: deterministic MaxRects nesting with lots, margins, spacing, kerf and rotation;
+independent overlap check, utilisation stats, one file per sheet plus a CSV coordinate report.
+
+✦ WORKS WITH
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator · Excel / Google Sheets
 ```

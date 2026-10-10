@@ -2,54 +2,78 @@
 
 App Atomm: **label-generator**
 
-## Step 2 · Dettagli dell'annuncio
+## Dettagli dell'annuncio
+**Immagine di copertina:** `2-IMMAGINI/cover.png` (4:3) — immagine aggiuntiva facoltativa: `2-IMMAGINI/screenshot-app.png`
 
-**Immagine di copertina:** `cover.png` (in questa cartella, formato 4:3)
-
-**Titolo della carta:**
+**Titolo della carta**
 ```
 INGLY Sign & Tag
 ```
 
-**Breve descrizione:**
+**Breve descrizione**
 ```
-Targhette, portachiavi e insegne con fori validati e testo convertito in tracciati.
+Targhette, portachiavi e insegne pronte per il laser: testo in tracciati, fori controllati, SVG/DXF in mm.
 ```
 
-**Descrizione dettagliata:**
+**Descrizione dettagliata**
 ```
-Crea in pochi secondi targhette, portachiavi, targhe per porte e insegne pronte per il laser.
+Crea in pochi secondi targhette, portachiavi, targhe per porte e insegne pronte da tagliare e incidere.
 
-• Dimensioni in millimetri, angoli raccordati, smussati o vivi
-• Due righe di testo con 4 font incorporati, adattamento automatico all'area sicura
-• Testo convertito in tracciati vettoriali: il file non dipende dai font installati
-• Fori di fissaggio (1, 2 o 4) con controllo del materiale minimo attorno al foro
-• Cornice incisa opzionale, margini di sicurezza configurabili
-• Esportazione SVG in mm: taglio (rosso), incisione (nero), marcatura (blu)
-• Varianti separate solo-taglio e solo-incisione, oppure ZIP con tutto
-• Se un foro esce dal pezzo o il testo sborda, l'esportazione viene bloccata e ti spiega cosa correggere
+✦ COSA FA
+• Misure in millimetri, angoli raccordati, smussati o vivi
+• Due righe di testo con 4 font inclusi e adattamento automatico all'area utile
+• Testo convertito in tracciati vettoriali: il file si apre uguale su ogni computer
+• Fori di fissaggio (1, 2 o 4) con controllo del materiale attorno al foro
+• Cornice incisa opzionale e margini di sicurezza
+• File separati solo taglio / solo incisione, oppure tutto in uno
+• Se un foro esce dal pezzo o il testo sborda, l'export si blocca e ti dice cosa correggere
 
-Modelli rapidi: portachiavi, targhetta, insegna, targa porta.
+✦ COMPATIBILE CON
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator
+Scegli il software nel menu «Software di destinazione»: il file viene adattato (colori LightBurn, guide rimosse, DXF per Silhouette).
+
+✦ COME SI USA
+1. Scegli un modello: portachiavi, targhetta, insegna, targa porta
+2. Scrivi il testo e regola misure e fori
+3. Esporta e lavora: rosso = taglio, nero = incisione, blu = marcatura
+
+✦ PERFETTO PER
+Regali personalizzati, uffici e studi professionali, B&B e hotel, negozi, eventi e bomboniere.
 ```
 
 **Mestiere da selezionare:** Laser → Taglio · Laser → Incisione · Stampa → Stampa UV
 
-## Step 3 · Artefatto di codice
+**Parole chiave:** targhetta, portachiavi, insegna, targa porta, nome, incisione, taglio laser, legno, acrilico, regalo personalizzato
 
-Carica il file `label-generator.html` (in questa cartella).
+## Artefatto di codice
+Carica `1-CODICE-da-caricare/label-generator.html`.
+
+## Compatibilità
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator
 
 ---
 
-### English version (optional)
-
+### English
 **Title:** INGLY Sign & Tag Maker
 
-**Short description:** Tags, keychains and signs with validated holes and text converted to vector paths.
+**Short description:** Laser-ready tags, keychains and signs: text as vector paths, checked holes, SVG/DXF in mm.
 
 **Detailed description:**
 ```
-Design laser-ready tags, keychains, door plates and signs in seconds.
-Millimetre sizing, rounded/chamfered corners, two text lines with 4 embedded fonts and auto-fit,
-text converted to vector paths, mounting holes with material checks, optional engraved border.
-Exports real SVG in mm with separate cut / engrave layers; invalid geometry blocks the export.
+Create laser-ready tags, keychains, door plates and signs in seconds.
+
+✦ FEATURES
+• Millimetre sizing; rounded, chamfered or square corners
+• Two text lines, 4 built-in fonts, automatic fit to the safe area
+• Text converted to vector paths: the file looks the same on every computer
+• Mounting holes (1, 2 or 4) with material checks around each hole
+• Optional engraved border and safety margins
+• Separate cut-only / engrave-only files or all-in-one
+• Invalid geometry blocks the export and tells you what to fix
+
+✦ WORKS WITH
+xTool Creative Space / xTool Studio · LightBurn · Glowforge · Cricut Design Space · Silhouette (DXF) · Inkscape · Illustrator
+
+✦ HOW TO
+1. Pick a template  2. Type your text and adjust size and holes  3. Export: red = cut, black = engrave, blue = score
 ```

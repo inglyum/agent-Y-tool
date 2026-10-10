@@ -23,7 +23,7 @@ ogni app è già pronta da copiare e incollare (file HTML, copertina, testi dell
 
 ```bash
 npm install
-npm test            # 63 test unitari, geometrici, raster e di esportazione (node:test)
+npm test            # 70 test unitari, geometrici, raster, compatibilità ed esportazione (node:test)
 npm run typecheck   # TypeScript strict
 npm run build       # dist/index.html (suite) + atomm-release/<slug>/<slug>.html
 npm run e2e         # test nel browser (Chromium) sui file finali
@@ -61,6 +61,21 @@ tests/              test unitari e di regressione
 Ogni generatore è una funzione pura `run(parametri) → { viste, problemi, statistiche, esportazioni }`.
 La UI non contiene geometria: per aggiungere un generatore crea `src/generators/<nome>.ts`, registralo in
 `registry.ts` e aggiungi la scheda in `scripts/listings.mjs`; il build crea il pacchetto Atomm.
+
+### Compatibilità con i software (src/core/compat.ts)
+Il menu **Software di destinazione** accanto a «Esporta» adatta ogni file, anche dentro gli ZIP:
+| Profilo | Cosa cambia |
+|---|---|
+| Universale (SVG) | livelli con nome per Inkscape/Illustrator (`inkscape:groupmode="layer"`) |
+| xTool Creative Space / Studio | SVG in mm senza guide (usato anche dall'hook Atomm) |
+| LightBurn | colori della tavolozza LightBurn (00 nero, 01 blu, 02 rosso), guide rimosse |
+| Glowforge | un colore per operazione, guide rimosse |
+| Cricut Design Space | forme chiuse senza guide; per Stampa e taglia c'è il PNG scontornato |
+| DXF (Silhouette, CAD) | DXF R12 in mm, livelli TAGLIO / INCISIONE / MARCATURA, curve in segmenti da 0,05 mm |
+
+### Kit di pubblicazione
+`npm run release` produce `INGLY-Generator-Lab-Kit.zip`: una cartella per app con codice, copertina,
+screenshot, un file di testo per ogni campo della scheda Atomm (IT + EN, parole chiave) e la guida.
 
 ### Convenzioni dei file esportati
 - `width`/`height` in **mm**, `viewBox` con 1 unità = 1 mm (verificato a ogni esportazione).

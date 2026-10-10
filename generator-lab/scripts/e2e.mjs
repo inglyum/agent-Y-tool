@@ -154,6 +154,16 @@ for (const l of LISTINGS) {
   });
   ok(hook.isBlob && hook.size > 0 && hook.filename.length > 0, `hook Atomm → ${hook.filename} (${hook.type}, ${hook.size} byte)`);
 
+  if (gen === 'sign-tag' || gen === 'box') {
+    await page.selectOption('.profile-select', 'dxf');
+    const dxf = await exportViaButton(page, 'svg');
+    ok(dxf.name.endsWith('.dxf') && dxf.bytes.toString().includes('$INSUNITS') && dxf.bytes.toString().includes('TAGLIO'), `profilo DXF (Silhouette/CAD) → ${dxf.name}`);
+    await page.selectOption('.profile-select', 'lightburn');
+    const lb = await exportViaButton(page, 'svg');
+    ok(!lb.bytes.toString().includes('data-operation="guide"') && checkSvgText(lb.bytes.toString()), 'profilo LightBurn: SVG senza guide');
+    ok(await page.$('.toast') !== null, 'notifica di esportazione');
+    await page.selectOption('.profile-select', 'universal');
+  }
   if (gen === 'sign-tag') {
     const before = await statText(page);
     await setField(page, gen, 'width', 100);
@@ -300,55 +310,6 @@ console.log('\n▶ suite (dist/index.html)');
 }
 
 await browser.close();
-
-if (covers) {
-  for (const l of LISTINGS) {
-    const md = `# ${l.title} — scheda Atomm (copia e incolla)
-
-App Atomm: **${l.slug}**
-
-## Step 2 · Dettagli dell'annuncio
-
-**Immagine di copertina:** \`cover.png\` (in questa cartella, formato 4:3)
-
-**Titolo della carta:**
-\`\`\`
-${l.title}
-\`\`\`
-
-**Breve descrizione:**
-\`\`\`
-${l.short}
-\`\`\`
-
-**Descrizione dettagliata:**
-\`\`\`
-${l.detailed}
-\`\`\`
-
-**Mestiere da selezionare:** ${l.crafts.join(' · ')}
-
-## Step 3 · Artefatto di codice
-
-Carica il file \`${l.slug}.html\` (in questa cartella).
-
----
-
-### English version (optional)
-
-**Title:** ${l.titleEn}
-
-**Short description:** ${l.shortEn}
-
-**Detailed description:**
-\`\`\`
-${l.detailedEn}
-\`\`\`
-`;
-    mkdirSync(join(root, 'atomm-release', l.slug), { recursive: true });
-    writeFileSync(join(root, 'atomm-release', l.slug, 'LISTING.md'), md);
-  }
-}
 
 console.log(failures ? `\n✗ ${failures} controlli falliti` : '\n✓ Tutti i controlli end-to-end superati');
 process.exit(failures ? 1 : 0);
