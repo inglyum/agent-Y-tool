@@ -13,14 +13,15 @@ INGLY Print & Cut
 
 **Breve descrizione:**
 ```
-Adesivi e sagomati: contorno di taglio automatico, abbondanza e crocini su foglio pronto.
+Adesivi e sagomati: sfondo rimosso in automatico, contorno di taglio, abbondanza e crocini.
 ```
 
 **Descrizione dettagliata:**
 ```
 Trasforma un'immagine in adesivi, magneti e sagomati pronti da stampare e tagliare.
 
-• Riconosce il soggetto da solo: PNG con trasparenza oppure sfondo uniforme
+• Rimuove lo sfondo in automatico: resta solo il soggetto (personaggio, logo, disegno), anche su sfondi sfumati
+• Opzioni per togliere lo sfondo chiuso nel soggetto e tenere solo il soggetto principale; esporta anche il PNG scontornato
 • Contorno di taglio a distanza costante, con arrotondamento che elimina rientranze impossibili da tagliare
 • Bordo del colore del materiale oppure colori estesi fino al taglio, con abbondanza configurabile
 • Foglio con più copie disposte automaticamente (A4 o misura libera)
@@ -46,7 +47,7 @@ Carica il file `print-and-cut.html` (in questa cartella).
 
 **Detailed description:**
 ```
-Turn an image into print-then-cut stickers, magnets and shapes: automatic subject detection (transparency or plain
-background), constant-offset cut contour with smoothing, optional colour bleed, multi-copy sheet layout, 3- or
+Turn an image into print-then-cut stickers, magnets and shapes: automatic background removal (keeps only the subject,
+works on gradient backgrounds), constant-offset cut contour with smoothing, optional colour bleed, multi-copy sheet layout, 3- or
 4-corner registration marks, aligned PRINT (PNG with DPI / SVG) and CUT (SVG in mm) files. Runs locally.
 ```

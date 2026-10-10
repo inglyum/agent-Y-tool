@@ -8,8 +8,8 @@ import { type Pt, fmt } from '../core/geometry.ts';
 import { nest } from '../core/nesting.ts';
 import { bool, hasErrors, normalizeParams, num, str } from '../core/params.ts';
 import {
-  type Mask, type Rgba, type VectorLoop, close, countFilled, dilate, downscale, fillHoles, hasTransparency, newMask, padMask,
-  smoothPath, subjectMask, traceMask, vectorLoops,
+  type BackgroundResult, type Mask, type Rgba, type VectorLoop, close, countFilled, dilate, downscale, fillHoles, hex, newMask, padMask,
+  removeBackground, smoothPath, traceMask, vectorLoops,
 } from '../core/raster.ts';
 import { svgDocument } from '../core/svg.ts';
 import type { ExportOption, GeneratorDef, GeneratorResult, Issue, ParamDef, Params, RunContext } from '../core/types.ts';
@@ -21,9 +21,11 @@ export const printCutParams: ParamDef[] = [
   { key: 'widthMm', label: 'Larghezza del disegno', type: 'number', group: 'Disegno', unit: 'mm', min: 5, max: 1000, step: 0.5 },
   {
     key: 'subject', label: 'Soggetto', type: 'select', group: 'Disegno',
-    options: [{ value: 'auto', label: 'Automatico (trasparenza o sfondo uniforme)' }, { value: 'full', label: 'Tutta l\'immagine (rettangolo)' }],
+    options: [{ value: 'auto', label: 'Rimuovi lo sfondo (automatico)' }, { value: 'full', label: 'Tieni tutta l\'immagine (rettangolo)' }],
   },
-  { key: 'tolerance', label: 'Tolleranza sfondo', type: 'number', group: 'Disegno', min: 1, max: 200, step: 1, visibleIf: (p) => p.subject === 'auto', help: 'Usata solo se l\'immagine non ha trasparenza.' },
+  { key: 'tolerance', label: 'Sensibilità rimozione sfondo', type: 'number', group: 'Disegno', min: 1, max: 100, step: 1, visibleIf: (p) => p.subject === 'auto', help: 'Più alta = toglie anche colori più diversi dallo sfondo (ombre, sfumature). Con PNG trasparenti si usa la trasparenza.' },
+  { key: 'enclosed', label: 'Togli anche lo sfondo chiuso dentro il soggetto', type: 'bool', group: 'Disegno', visibleIf: (p) => p.subject === 'auto', help: 'Es. lo spazio fra braccio e corpo di un personaggio.' },
+  { key: 'keepMain', label: 'Tieni solo il soggetto principale', type: 'bool', group: 'Disegno', visibleIf: (p) => p.subject === 'auto', help: 'Elimina scritte, firme e oggetti staccati dal soggetto più grande.' },
   { key: 'offset', label: 'Distanza del taglio dal disegno', type: 'number', group: 'Contorno di taglio', unit: 'mm', min: 0, max: 30, step: 0.1 },
   { key: 'smooth', label: 'Arrotondamento contorno', type: 'number', group: 'Contorno di taglio', unit: 'mm', min: 0, max: 20, step: 0.1, help: 'Chiude rientranze e fessure più strette del doppio di questo valore: il taglio resta pulito.' },
   { key: 'outerOnly', label: 'Solo contorno esterno (ignora i fori interni)', type: 'bool', group: 'Contorno di taglio' },
@@ -41,7 +43,7 @@ export const printCutParams: ParamDef[] = [
 ];
 
 export const printCutDefaults: Params = {
-  image: '', widthMm: 60, subject: 'auto', tolerance: 40, offset: 2, smooth: 1.5, outerOnly: true, border: 'material', bleed: 1, dpi: 300,
+  image: '', widthMm: 60, subject: 'auto', tolerance: 35, enclosed: true, keepMain: false, offset: 2, smooth: 1.5, outerOnly: true, border: 'material', bleed: 1, dpi: 300,
   sheetW: 210, sheetH: 297, copies: 6, spacing: 4, marks: '3', markSize: 5, markInset: 8, filename: 'ingly-sticker',
 };
 
@@ -57,8 +59,12 @@ export interface StickerModel {
   art: { x: number; y: number; w: number; h: number };
   /** strato del bordo esteso (risoluzione di lavoro) e sua posizione */
   borderLayer: { img: Rgba; x: number; y: number; w: number; h: number } | null;
-  /** anteprima a bassa risoluzione del disegno */
+  /** anteprima a bassa risoluzione del disegno (già scontornato) */
   preview: Rgba;
+  /** disegno da stampare: scontornato (sfondo trasparente) oppure intero */
+  artImg: Rgba;
+  /** esito della rimozione dello sfondo */
+  removal: BackgroundResult | null;
   subjectPx: number;
   touchesEdge: boolean;
 }
@@ -97,13 +103,27 @@ export function extendColors(img: Rgba, src: Mask, region: Mask, pad: number): R
 }
 
 let memo: { key: string; file: unknown; model: StickerModel | null; issues: Issue[] } | null = null;
+let bgMemo: { key: string; file: unknown; result: BackgroundResult } | null = null;
 
 export function analyzeSticker(img: Rgba, p: Params): { model: StickerModel | null; issues: Issue[] } {
-  const keys = ['widthMm', 'subject', 'tolerance', 'offset', 'smooth', 'outerOnly', 'border', 'bleed'];
+  const keys = ['widthMm', 'subject', 'tolerance', 'enclosed', 'keepMain', 'offset', 'smooth', 'outerOnly', 'border', 'bleed', 'dpi'];
   const key = JSON.stringify(keys.map((k) => p[k]));
   if (memo && memo.file === img && memo.key === key) return { model: memo.model, issues: memo.issues };
   const issues: Issue[] = [];
-  const work = downscale(img, WORK_SIDE);
+  // risoluzione del disegno di stampa: quella richiesta dai DPI, fra 600 e 2400 px
+  const needW = (num(p, 'widthMm') / 25.4) * num(p, 'dpi');
+  const source = downscale(img, Math.max(600, Math.min(2400, needW * (Math.max(img.width, img.height) / img.width))));
+  let removal: BackgroundResult | null = null;
+  let artImg = source;
+  if (str(p, 'subject') === 'auto') {
+    // la rimozione dello sfondo è l'operazione più lenta: si ricalcola solo se cambiano immagine o opzioni di sfondo
+    const rk = JSON.stringify([source.width, num(p, 'tolerance'), bool(p, 'enclosed'), bool(p, 'keepMain')]);
+    if (!bgMemo || bgMemo.file !== img || bgMemo.key !== rk)
+      bgMemo = { file: img, key: rk, result: removeBackground(source, { tolerance: num(p, 'tolerance'), enclosed: bool(p, 'enclosed'), keepMain: bool(p, 'keepMain') }) };
+    removal = bgMemo.result;
+    artImg = removal.cutout;
+  }
+  const work = downscale(artImg, WORK_SIDE);
   const scale = num(p, 'widthMm') / work.width;
   const offset = num(p, 'offset'), smooth = num(p, 'smooth'), bleed = num(p, 'bleed');
   const pad = Math.ceil((offset + smooth + bleed) / scale) + 3;
@@ -111,19 +131,24 @@ export function analyzeSticker(img: Rgba, p: Params): { model: StickerModel | nu
   if (str(p, 'subject') === 'full') {
     subj = newMask(work.width, work.height);
     subj.data.fill(1);
-  } else subj = subjectMask(work, num(p, 'tolerance'));
+  } else {
+    subj = newMask(work.width, work.height);
+    for (let i = 0; i < subj.data.length; i++) subj.data[i] = work.data[i * 4 + 3] >= 128 ? 1 : 0;
+  }
   const subjectPx = countFilled(subj);
   let touchesEdge = false;
   for (let x = 0; x < work.width && !touchesEdge; x++) touchesEdge = !!(subj.data[x] || subj.data[(work.height - 1) * work.width + x]);
   for (let y = 0; y < work.height && !touchesEdge; y++) touchesEdge = !!(subj.data[y * work.width] || subj.data[y * work.width + work.width - 1]);
   if (subjectPx < 20) {
-    issues.push({ level: 'error', field: 'tolerance', message: 'Soggetto non trovato: usa un PNG con sfondo trasparente oppure regola la tolleranza.' });
+    issues.push({ level: 'error', field: 'tolerance', message: 'Soggetto non trovato: abbassa la sensibilità di rimozione sfondo oppure usa un PNG con sfondo trasparente.' });
     const r = { model: null, issues };
     memo = { key, file: img, ...r };
     return r;
   }
-  if (touchesEdge && str(p, 'subject') === 'auto' && !hasTransparency(work))
-    issues.push({ level: 'warning', field: 'tolerance', message: 'Il soggetto tocca il bordo dell\'immagine: lo sfondo potrebbe non essere stato riconosciuto.' });
+  if (touchesEdge && removal?.method === 'flood')
+    issues.push({ level: 'warning', field: 'tolerance', message: 'Il soggetto tocca il bordo dell\'immagine: controlla nella vista «Sfondo rimosso» che sia stato riconosciuto correttamente.' });
+  if (removal?.method === 'flood' && removal.removed < 0.05)
+    issues.push({ level: 'warning', field: 'tolerance', message: 'Quasi nessuno sfondo rimosso: aumenta la sensibilità o verifica che lo sfondo sia distinguibile dal soggetto.' });
   const base = padMask(bool(p, 'outerOnly') ? fillHoles(subj) : subj, pad);
   const cut = close(dilate(base, offset / scale), smooth / scale);
   // il contorno di taglio deve comunque contenere il soggetto
@@ -136,7 +161,7 @@ export function analyzeSticker(img: Rgba, p: Params): { model: StickerModel | nu
   const bx = Math.min(...xs), by = Math.min(...ys);
   const shift = (ls: VectorLoop[]) => ls.map((l) => ({ ...l, pts: l.pts.map((q) => ({ x: q.x - bx, y: q.y - by })) }));
   const cutLoops = shift(loops);
-  const artH = (num(p, 'widthMm') * img.height) / img.width;
+  const artH = (num(p, 'widthMm') * artImg.height) / artImg.width;
   let borderLayer: StickerModel['borderLayer'] = null;
   if (str(p, 'border') === 'extend') {
     const region = dilate(cut, bleed / scale + 1);
@@ -146,7 +171,7 @@ export function analyzeSticker(img: Rgba, p: Params): { model: StickerModel | nu
   }
   const model: StickerModel = {
     w: Math.max(...xs) - bx, h: Math.max(...ys) - by, cutLoops, cutPath: smoothPath(cutLoops, 100), clipPath: smoothPath(shift(clipLoops), 100),
-    art: { x: -bx, y: -by, w: num(p, 'widthMm'), h: artH }, borderLayer, preview: downscale(img, 900), subjectPx, touchesEdge,
+    art: { x: -bx, y: -by, w: num(p, 'widthMm'), h: artH }, borderLayer, preview: downscale(artImg, 900), artImg, removal, subjectPx, touchesEdge,
   };
   memo = { key, file: img, model, issues };
   return { model, issues };
@@ -245,7 +270,7 @@ export function runPrintCut(raw: Params, ctx: RunContext): GeneratorResult {
     const g = c.getContext('2d')!;
     const k = dpi / 25.4;
     g.scale(k, k);
-    const art = rgbaCanvas(img);
+    const art = rgbaCanvas(m.artImg);
     const border = m.borderLayer ? rgbaCanvas(m.borderLayer.img) : null;
     const clip = new Path2D(m.clipPath);
     for (const q of places) {
@@ -261,17 +286,30 @@ export function runPrintCut(raw: Params, ctx: RunContext): GeneratorResult {
     return { filename: safeFilename(`${base}-stampa`, 'png'), blob: new Blob([pngWithDpi(await canvasPng(c), dpi)], { type: 'image/png' }) };
   };
   const cutFile = () => svgFile(cutSvg, safeFilename(`${base}-taglio`, 'svg'));
-  const printSvgFile = () => svgFile(printSvg(img), safeFilename(`${base}-stampa`, 'svg'));
+  const printSvgFile = () => svgFile(printSvg(m.artImg), safeFilename(`${base}-stampa`, 'svg'));
   const exports: ExportOption[] = [
     { id: 'zip', label: 'ZIP: stampa (PNG + SVG) + taglio (SVG)', requiresValid: true, primary: true, build: async () => zipFile([await printPng(), printSvgFile(), cutFile()], safeFilename(base, 'zip')) },
     { id: 'cut', label: 'SVG di taglio', requiresValid: true, build: async () => cutFile() },
     { id: 'print-png', label: `PNG di stampa ${pxW}×${pxH} px a ${fmt(dpi)} DPI`, requiresValid: true, build: printPng },
     { id: 'print-svg', label: 'SVG di stampa (immagine incorporata)', requiresValid: true, build: async () => printSvgFile() },
+    {
+      id: 'cutout', label: 'PNG del soggetto scontornato (sfondo trasparente)', requiresValid: true,
+      build: async () => {
+        if (!hasDom()) throw new Error('Esportazione PNG disponibile solo nel browser.');
+        return { filename: safeFilename(`${base}-scontornato`, 'png'), blob: new Blob([await canvasPng(rgbaCanvas(m.artImg))], { type: 'image/png' }) };
+      },
+    },
   ];
+  // vista del soggetto scontornato su scacchiera (trasparenza) con il contorno di taglio
+  const cutoutUrl = dataUrl(m.preview);
+  const cutoutSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(m.w)}mm" height="${fmt(m.h)}mm" viewBox="0 0 ${fmt(m.w)} ${fmt(m.h)}"><defs><pattern id="chk" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#d9dde3"/><rect x="2" y="2" width="2" height="2" fill="#d9dde3"/></pattern></defs><rect width="${fmt(m.w)}" height="${fmt(m.h)}" fill="url(#chk)"/>${cutoutUrl ? `<image x="${fmt(m.art.x)}" y="${fmt(m.art.y)}" width="${fmt(m.art.w)}" height="${fmt(m.art.h)}" preserveAspectRatio="none" href="${cutoutUrl}"/>` : ''}<path d="${m.cutPath}" fill="none" stroke="#FF0000" stroke-width="0.3"/></svg>`;
+  if (m.removal?.method === 'flood')
+    issues.push({ level: 'info', field: 'tolerance', message: `Sfondo rimosso automaticamente (${Math.round(m.removal.removed * 100)}% dell'immagine): controlla la vista «Sfondo rimosso».` });
   return {
     views: [
       { id: 'sheet', label: 'Stampa + taglio', widthMm: W, heightMm: H, svg: previewSvg },
       { id: 'cut', label: 'File di taglio', widthMm: W, heightMm: H, svg: cutSvg },
+      { id: 'cutout', label: 'Sfondo rimosso', widthMm: m.w, heightMm: m.h, svg: cutoutSvg },
     ],
     issues,
     stats: [
@@ -280,6 +318,10 @@ export function runPrintCut(raw: Params, ctx: RunContext): GeneratorResult {
       { label: 'Lunghezza di taglio', value: `${fmt(perimeter(m.cutLoops) * placed / 1000)} m` },
       { label: 'Risoluzione disegno', value: `${Math.round(ppi)} ppi a questa misura` },
       { label: 'Sagome', value: String(shapes) },
+      {
+        label: 'Sfondo',
+        value: !m.removal ? 'immagine intera' : m.removal.method === 'alpha' ? 'trasparenza del PNG' : `rimosso ${Math.round(m.removal.removed * 100)}% · ${m.removal.background.map(hex).join(' ')}`,
+      },
       { label: 'Bordo stampato', value: m.borderLayer ? `colori estesi + ${fmt(num(p, 'bleed'))} mm di abbondanza` : 'colore del materiale' },
     ],
     exports,

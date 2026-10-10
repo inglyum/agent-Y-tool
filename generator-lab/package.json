@@ -10,7 +10,8 @@
     "test": "node scripts/gen-fonts.mjs && node --test tests/*.test.ts",
     "build": "node scripts/gen-fonts.mjs && node scripts/build.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "release": "npm run typecheck && npm test && npm run build && node scripts/e2e.mjs --covers",
+    "release": "npm run typecheck && npm test && npm run build && node scripts/e2e.mjs --covers && node scripts/covers.mjs",
+    "covers": "node scripts/covers.mjs",
     "serve": "node scripts/serve.mjs"
   },
   "license": "UNLICENSED",

@@ -410,3 +410,184 @@ export function quantize(img: Rgba, k: number, iterations = 12): Palette {
 export function hex(c: [number, number, number]): string {
   return '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('').toUpperCase();
 }
+
+// ---------- rimozione intelligente dello sfondo ----------
+
+/** sRGB (0–255) → CIELAB (D65): distanze percettive fra colori. */
+const LIN = (() => {
+  const t = new Float64Array(256);
+  for (let v = 0; v < 256; v++) { const c = v / 255; t[v] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
+  return t;
+})();
+
+export function toLab(r: number, g: number, b: number): [number, number, number] {
+  const R = LIN[r | 0], G = LIN[g | 0], B = LIN[b | 0];
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const x = f((0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047), y = f(0.2126 * R + 0.7152 * G + 0.0722 * B), z = f((0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+
+export interface BackgroundOptions {
+  /** sensibilità 1–100: più alta = rimuove più colori simili allo sfondo */
+  tolerance: number;
+  /** tiene solo il soggetto principale (il gruppo di pixel più grande) */
+  keepMain: boolean;
+  /** rimuove anche le zone di sfondo racchiuse nel soggetto (es. fra braccio e corpo) */
+  enclosed: boolean;
+}
+
+export interface BackgroundResult {
+  /** 1 = soggetto */
+  mask: Mask;
+  /** immagine con lo sfondo trasparente e bordi ammorbiditi */
+  cutout: Rgba;
+  /** colori di sfondo riconosciuti */
+  background: [number, number, number][];
+  /** quota dell'immagine rimossa (0–1) */
+  removed: number;
+  method: 'alpha' | 'flood';
+}
+
+/**
+ * Rimozione dello sfondo senza servizi esterni:
+ * 1. modello dello sfondo = colori dominanti del bordo dell'immagine (k-means in Lab);
+ * 2. crescita di regione dal bordo: un pixel è sfondo se è vicino al modello, oppure se continua
+ *    in modo graduale un pixel di sfondo vicino (sfumature, ombre leggere, vignettature);
+ * 3. pulizia: isole minuscole eliminate, buchi del soggetto riempiti, soggetto principale opzionale,
+ *    sfondo racchiuso opzionale; 4. bordo morbido (alfa proporzionale alla distanza dallo sfondo).
+ * Se l'immagine ha già la trasparenza viene usata quella.
+ */
+export function removeBackground(img: Rgba, o: BackgroundOptions): BackgroundResult {
+  const { width: w, height: h } = img;
+  const n = w * h;
+  if (hasTransparency(img)) {
+    const mask = newMask(w, h);
+    for (let i = 0; i < n; i++) mask.data[i] = img.data[i * 4 + 3] >= 128 ? 1 : 0;
+    return { mask, cutout: { width: w, height: h, data: new Uint8ClampedArray(img.data) }, background: [], removed: 1 - countFilled(mask) / n, method: 'alpha' };
+  }
+  const lab = new Float32Array(n * 3);
+  const cache = new Map<number, [number, number, number]>();
+  for (let i = 0; i < n; i++) {
+    const key = (img.data[i * 4] << 16) | (img.data[i * 4 + 1] << 8) | img.data[i * 4 + 2];
+    let L = cache.get(key);
+    if (!L) { L = toLab(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]); if (cache.size < 400000) cache.set(key, L); }
+    lab[i * 3] = L[0]; lab[i * 3 + 1] = L[1]; lab[i * 3 + 2] = L[2];
+  }
+  // 1. colori del bordo → fino a 4 gruppi, scartando quelli rari (oggetti che toccano il bordo)
+  const border: number[] = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
+  const K = 4;
+  const sorted = [...border].sort((a, b) => lab[a * 3] - lab[b * 3]);
+  let C = Array.from({ length: K }, (_, k) => { const i = sorted[Math.floor(((k + 0.5) / K) * sorted.length)]; return [lab[i * 3], lab[i * 3 + 1], lab[i * 3 + 2]]; });
+  const d2 = (i: number, c: number[]) => (lab[i * 3] - c[0]) ** 2 + (lab[i * 3 + 1] - c[1]) ** 2 + (lab[i * 3 + 2] - c[2]) ** 2;
+  let counts: number[] = [];
+  for (let it = 0; it < 10; it++) {
+    const acc = C.map(() => [0, 0, 0, 0]);
+    for (const i of border) {
+      let bk = 0, bd = Infinity;
+      C.forEach((c, k) => { const d = d2(i, c); if (d < bd) { bd = d; bk = k; } });
+      acc[bk][0] += lab[i * 3]; acc[bk][1] += lab[i * 3 + 1]; acc[bk][2] += lab[i * 3 + 2]; acc[bk][3]++;
+    }
+    C = C.map((c, k) => (acc[k][3] ? [acc[k][0] / acc[k][3], acc[k][1] / acc[k][3], acc[k][2] / acc[k][3]] : c));
+    counts = acc.map((a) => a[3]);
+  }
+  const model = C.filter((_, k) => counts[k] >= border.length * 0.12);
+  const T = 4 + o.tolerance * 0.45; // soglia ΔE dal modello di sfondo
+  const step = 1.5 + o.tolerance * 0.04; // variazione massima fra pixel vicini di sfondo
+  const dm = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let best = Infinity;
+    for (let k = 0; k < model.length; k++) {
+      const c = model[k];
+      const d = (lab[i * 3] - c[0]) ** 2 + (lab[i * 3 + 1] - c[1]) ** 2 + (lab[i * 3 + 2] - c[2]) ** 2;
+      if (d < best) best = d;
+    }
+    dm[i] = Math.sqrt(best);
+  }
+  // 2. crescita della regione di sfondo dal bordo
+  const bg = new Uint8Array(n);
+  const queue = new Int32Array(n);
+  let qh = 0, qt = 0;
+  for (const i of border) if (dm[i] < T && !bg[i]) { bg[i] = 1; queue[qt++] = i; }
+  while (qh < qt) {
+    const i = queue[qh++];
+    const x = i % w, y = (i / w) | 0;
+    const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+    for (const j of nb) {
+      if (j < 0 || bg[j]) continue;
+      const local = Math.sqrt((lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2);
+      if (dm[j] < T || (local < step && dm[j] < T * 2.5)) { bg[j] = 1; queue[qt++] = j; }
+    }
+  }
+  // 3. sfondo racchiuso: zone interne molto simili allo sfondo e non minuscole
+  if (o.enclosed) {
+    const seen = new Uint8Array(n);
+    for (let s = 0; s < n; s++) {
+      if (bg[s] || seen[s] || dm[s] >= T * 0.7) continue;
+      const comp: number[] = [s];
+      seen[s] = 1;
+      for (let k = 0; k < comp.length; k++) {
+        const i = comp[k], x = i % w, y = (i / w) | 0;
+        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1])
+          if (j >= 0 && !seen[j] && !bg[j] && dm[j] < T * 0.7) { seen[j] = 1; comp.push(j); }
+      }
+      if (comp.length > n * 0.004) for (const i of comp) bg[i] = 1;
+    }
+  }
+  let mask = newMask(w, h);
+  for (let i = 0; i < n; i++) mask.data[i] = bg[i] ? 0 : 1;
+  // pulizia: componenti del soggetto
+  const comps = components(mask);
+  const largest = Math.max(0, ...comps.map((c) => c.length));
+  for (const c of comps) {
+    // solo puntini di rumore: lettere e dettagli piccoli restano (a meno di "solo soggetto principale")
+    const drop = c.length < Math.max(6, Math.min(n * 0.00005, largest * 0.002)) || (o.keepMain && c.length !== largest);
+    if (drop) for (const i of c) mask.data[i] = 0;
+  }
+  // buchi piccoli nel soggetto (riflessi, occhi bianchi) restano parte del soggetto
+  if (!o.enclosed) mask = fillHoles(mask);
+  else {
+    const holes = fillHoles(mask);
+    const inv = newMask(w, h);
+    for (let i = 0; i < n; i++) inv.data[i] = holes.data[i] && !mask.data[i] ? 1 : 0;
+    for (const c of components(inv)) if (c.length < n * 0.004) for (const i of c) mask.data[i] = 1;
+  }
+  // 4. ritaglio con bordo morbido sui pixel di confine
+  const cutout = new Uint8ClampedArray(img.data);
+  for (let i = 0; i < n; i++) {
+    if (!mask.data[i]) { cutout[i * 4 + 3] = 0; continue; }
+    const x = i % w, y = (i / w) | 0;
+    const edge = (x > 0 && !mask.data[i - 1]) || (x < w - 1 && !mask.data[i + 1]) || (y > 0 && !mask.data[i - w]) || (y < h - 1 && !mask.data[i + w]);
+    if (edge) cutout[i * 4 + 3] = Math.round(255 * Math.max(0.35, Math.min(1, (dm[i] - T * 0.5) / T)));
+  }
+  const bgRgb = model.map(([L, a, b]) => labToRgb(L, a, b));
+  return { mask, cutout: { width: w, height: h, data: cutout }, background: bgRgb, removed: 1 - countFilled(mask) / n, method: 'flood' };
+}
+
+/** Componenti connesse (4-vicinato) dei pixel pieni. */
+export function components(m: Mask): number[][] {
+  const seen = new Uint8Array(m.w * m.h);
+  const out: number[][] = [];
+  for (let s = 0; s < m.data.length; s++) {
+    if (!m.data[s] || seen[s]) continue;
+    const comp = [s];
+    seen[s] = 1;
+    for (let k = 0; k < comp.length; k++) {
+      const i = comp[k], x = i % m.w, y = (i / m.w) | 0;
+      for (const j of [x > 0 ? i - 1 : -1, x < m.w - 1 ? i + 1 : -1, y > 0 ? i - m.w : -1, y < m.h - 1 ? i + m.w : -1])
+        if (j >= 0 && m.data[j] && !seen[j]) { seen[j] = 1; comp.push(j); }
+    }
+    out.push(comp);
+  }
+  return out;
+}
+
+function labToRgb(L: number, a: number, b: number): [number, number, number] {
+  const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+  const inv = (t: number) => (t ** 3 > 0.008856 ? t ** 3 : (t - 16 / 116) / 7.787);
+  const X = inv(fx) * 0.95047, Y = inv(fy), Z = inv(fz) * 1.08883;
+  const R = 3.2406 * X - 1.5372 * Y - 0.4986 * Z, G = -0.9689 * X + 1.8758 * Y + 0.0415 * Z, B = 0.0557 * X - 0.204 * Y + 1.057 * Z;
+  const g = (v: number) => Math.round(255 * Math.max(0, Math.min(1, v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055)));
+  return [g(R), g(G), g(B)];
+}

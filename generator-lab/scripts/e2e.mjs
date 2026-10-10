@@ -67,7 +67,16 @@ async function demoArt(page, kind) {
   const bytes = await page.evaluate(async (kind) => {
     const cv = document.createElement('canvas');
     const g = cv.getContext('2d');
-    if (kind === 'sticker') {
+    if (kind === 'photo') {
+      // personaggio su sfondo sfumato opaco (come una foto): lo sfondo va rimosso in automatico
+      cv.width = 700; cv.height = 700;
+      const bg = g.createLinearGradient(0, 0, 0, 700);
+      bg.addColorStop(0, '#b9d4f0'); bg.addColorStop(1, '#f2f6fa');
+      g.fillStyle = bg; g.fillRect(0, 0, 700, 700);
+      g.fillStyle = '#c2410c'; g.beginPath(); g.arc(350, 200, 110, 0, Math.PI * 2); g.fill();
+      g.fillRect(250, 300, 200, 300); g.fillRect(150, 320, 60, 240); g.fillRect(150, 320, 120, 50); g.fillRect(150, 520, 120, 40);
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(315, 185, 18, 0, Math.PI * 2); g.arc(385, 185, 18, 0, Math.PI * 2); g.fill();
+    } else if (kind === 'sticker') {
       cv.width = 800; cv.height = 600;
       g.translate(400, 300);
       g.fillStyle = '#facc15';
@@ -173,6 +182,14 @@ for (const l of LISTINGS) {
   }
   if (gen === 'print-cut') {
     ok(await page.$('.content svg image') !== null, 'anteprima con disegno e contorno di taglio');
+    await page.setInputFiles(`#p-${gen}-image`, { name: 'foto.png', mimeType: 'image/png', buffer: await demoArt(page, 'photo') });
+    await page.waitForTimeout(400);
+    await page.waitForFunction(() => !document.querySelector('.status.processing'), null, { timeout: 20000 });
+    ok(/rimosso \d+%/.test(await statText(page)), 'sfondo di una foto opaca rimosso in automatico');
+    await page.click('.tab:has-text("Sfondo rimosso")');
+    ok(await page.$('.content svg image') !== null, 'vista «Sfondo rimosso» con il soggetto scontornato');
+    const co = await exportViaButton(page, 'cutout');
+    ok(co.bytes.subarray(1, 4).toString() === 'PNG', `PNG scontornato (${co.bytes.length} byte)`);
     const png = await exportViaButton(page, 'print-png');
     ok(png.bytes.subarray(1, 4).toString() === 'PNG' && png.bytes.includes(Buffer.from('pHYs')), `PNG di stampa con DPI (${png.bytes.length} byte)`);
     const cut = await exportViaButton(page, 'cut');
@@ -261,9 +278,9 @@ for (const l of LISTINGS) {
     if (gen === 'box') await c.page.$eval('.panel.right', (e) => e.scrollTo(0, 0));
     if (gen === 'layer-light') await c.page.click('.tab >> nth=0');
     await c.page.waitForTimeout(400);
-    const out = join(root, 'atomm-release', l.slug, 'cover.png');
+    const out = join(root, 'atomm-release', l.slug, 'screenshot-app.png');
     await c.page.screenshot({ path: out });
-    console.log(`  → copertina ${out.replace(root + '/', '')}`);
+    console.log(`  → screenshot ${out.replace(root + '/', '')}`);
     await c.ctx.close();
   }
 }

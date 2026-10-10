@@ -219,3 +219,80 @@ test('Image → SVG: ogni controllo ha effetto', () => {
   for (const [base, k, v] of cases) assert.notEqual(fp({ ...base, [k]: v }), fp(base), `${k} non ha effetto`);
   assert.match(errors(runVectorize({ ...bw, threshold: 1 }, files(img)))[0].message, /Nessuna forma/);
 });
+
+// ---------------- rimozione intelligente dello sfondo ----------------
+import { removeBackground } from '../src/core/raster.ts';
+
+/** Personaggio sintetico su sfondo sfumato e rumoroso (come una foto o un disegno scansionato). */
+function character(noise = 8) {
+  let seed = 9;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 2 * noise;
+  const truth = (x: number, y: number) => {
+    const head = (x - 200) ** 2 + (y - 110) ** 2 < 60 ** 2;
+    const body = x > 150 && x < 250 && y > 165 && y < 330;
+    const armL = x > 95 && x < 120 && y > 180 && y < 320; // braccio staccato dal corpo: fra i due c'è sfondo chiuso
+    const hand = x > 95 && x < 155 && y > 300 && y < 320;
+    const shoulder = x > 95 && x < 155 && y > 168 && y < 188; // spalla: lo spazio fra braccio e corpo è chiuso
+    return head || body || armL || hand || shoulder;
+  };
+  const caption = (x: number, y: number) => x > 300 && x < 380 && y > 330 && y < 350;
+  const img = image(400, 400, (x, y) => {
+    const n = rnd();
+    if ((x - 180) ** 2 + (y - 100) ** 2 < 8 ** 2 || (x - 220) ** 2 + (y - 100) ** 2 < 8 ** 2) return [250, 250, 252]; // occhi bianchi
+    if (truth(x, y)) return [200 + n, 70 + n, 40 + n];
+    if (caption(x, y)) return [30 + n, 30 + n, 30 + n];
+    const t = y / 400; // sfondo sfumato azzurro → bianco
+    return [180 + 60 * t + n, 210 + 35 * t + n, 240 + 10 * t + n];
+  });
+  return { img, truth, caption };
+}
+
+test('Sfondo: rimosso su sfondo sfumato e rumoroso, il soggetto resta intero', () => {
+  const { img, truth, caption } = character();
+  const r = removeBackground(img, { tolerance: 35, enclosed: true, keepMain: false });
+  assert.equal(r.method, 'flood');
+  let wrong = 0, total = 0;
+  for (let y = 0; y < 400; y++)
+    for (let x = 0; x < 400; x++) {
+      const want = truth(x + 0.5, y + 0.5) || caption(x + 0.5, y + 0.5) ? 1 : 0;
+      total++;
+      if (r.mask.data[y * 400 + x] !== want) wrong++;
+    }
+  assert.ok(wrong / total < 0.01, `pixel errati ${((wrong / total) * 100).toFixed(2)}%`);
+  // gli occhi bianchi (simili allo sfondo ma piccoli e dentro il soggetto) restano
+  assert.equal(r.mask.data[100 * 400 + 180], 1);
+  // lo sfondo fra braccio e corpo viene tolto
+  assert.equal(r.mask.data[250 * 400 + 135], 0);
+  // trasparenza reale nel ritaglio
+  assert.equal(r.cutout.data[(5 * 400 + 5) * 4 + 3], 0);
+  assert.equal(r.cutout.data[(250 * 400 + 200) * 4 + 3], 255);
+});
+
+test('Sfondo: opzioni "sfondo chiuso" e "solo soggetto principale"', () => {
+  const { img } = character();
+  const keep = removeBackground(img, { tolerance: 35, enclosed: false, keepMain: false });
+  assert.equal(keep.mask.data[250 * 400 + 135], 1, 'senza l\'opzione lo spazio chiuso resta');
+  const all = removeBackground(img, { tolerance: 35, enclosed: true, keepMain: false });
+  assert.equal(all.mask.data[340 * 400 + 340], 1, 'senza l\'opzione la scritta resta');
+  // lettere piccole (2×6 px) staccate: non sono rumore
+  const small = image(200, 120, (x, y) => (x > 40 && x < 160 && y > 20 && y < 80) || (y > 95 && y < 101 && (x % 8) > 5 && x < 100) ? [20, 20, 20] : [235, 240, 245]);
+  const sm = removeBackground(small, { tolerance: 35, enclosed: true, keepMain: false });
+  assert.equal(sm.mask.data[98 * 200 + 14], 1, 'dettaglio piccolo conservato');
+  const main = removeBackground(img, { tolerance: 35, enclosed: true, keepMain: true });
+  assert.equal(main.mask.data[340 * 400 + 340], 0, 'la scritta staccata viene eliminata');
+  assert.equal(main.mask.data[250 * 400 + 200], 1);
+});
+
+test('Print & Cut: la stampa usa il soggetto scontornato e il taglio segue il soggetto, non il rettangolo', () => {
+  const { img } = character();
+  const p = { ...printCut.defaults, widthMm: 80, offset: 2, smooth: 1, keepMain: true };
+  const r = runPrintCut(p, files(img));
+  assert.deepEqual(errors(r), []);
+  const { model } = analyzeSticker(img, p);
+  // il personaggio occupa circa 155×270 px su 400: l'adesivo è molto più piccolo dell'immagine intera
+  assert.ok(model!.w < 80 * 0.5 && model!.h < 80 * 0.8, `${model!.w} × ${model!.h}`);
+  assert.equal(model!.artImg.data[3], 0, 'angolo dell\'immagine trasparente nel file di stampa');
+  assert.match(r.stats.find((s) => s.label === 'Sfondo')!.value, /rimosso \d+%/);
+  assert.ok(r.views.some((v) => v.id === 'cutout'));
+  assert.ok(r.exports.some((x) => x.id === 'cutout'));
+});

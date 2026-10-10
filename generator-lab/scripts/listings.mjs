@@ -138,12 +138,13 @@ invented — missing data is requested from you. CSV/JSON export.`,
     slug: 'print-and-cut',
     title: 'INGLY Print & Cut',
     titleEn: 'INGLY Print & Cut Sticker Maker',
-    short: 'Adesivi e sagomati: contorno di taglio automatico, abbondanza e crocini su foglio pronto.',
+    short: 'Adesivi e sagomati: sfondo rimosso in automatico, contorno di taglio, abbondanza e crocini.',
     shortEn: 'Stickers and die-cut shapes: automatic cut contour, bleed and registration marks on a ready sheet.',
     crafts: ['Stampa → Taglio di coltello', 'Stampa → Stampa UV', 'Stampa → Stampa a inchiostro', 'Laser → Taglio'],
     detailed: `Trasforma un'immagine in adesivi, magneti e sagomati pronti da stampare e tagliare.
 
-• Riconosce il soggetto da solo: PNG con trasparenza oppure sfondo uniforme
+• Rimuove lo sfondo in automatico: resta solo il soggetto (personaggio, logo, disegno), anche su sfondi sfumati
+• Opzioni per togliere lo sfondo chiuso nel soggetto e tenere solo il soggetto principale; esporta anche il PNG scontornato
 • Contorno di taglio a distanza costante, con arrotondamento che elimina rientranze impossibili da tagliare
 • Bordo del colore del materiale oppure colori estesi fino al taglio, con abbondanza configurabile
 • Foglio con più copie disposte automaticamente (A4 o misura libera)
@@ -151,8 +152,8 @@ invented — missing data is requested from you. CSV/JSON export.`,
 • File di STAMPA (PNG con DPI e SVG) e file di TAGLIO (SVG in mm) perfettamente allineati
 • Lunghezza di taglio e numero di copie calcolati
 • L'immagine resta sul tuo dispositivo`,
-    detailedEn: `Turn an image into print-then-cut stickers, magnets and shapes: automatic subject detection (transparency or plain
-background), constant-offset cut contour with smoothing, optional colour bleed, multi-copy sheet layout, 3- or
+    detailedEn: `Turn an image into print-then-cut stickers, magnets and shapes: automatic background removal (keeps only the subject,
+works on gradient backgrounds), constant-offset cut contour with smoothing, optional colour bleed, multi-copy sheet layout, 3- or
 4-corner registration marks, aligned PRINT (PNG with DPI / SVG) and CUT (SVG in mm) files. Runs locally.`,
   },
   {
